@@ -6,7 +6,7 @@
         document.documentElement.setAttribute('data-theme', 'dark');
     </script>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5">
     <title>Gestión de Comunidad - Sistema Administrativo</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1977,6 +1977,127 @@
             }
         }
 
+        /* ========== Tablet y móvil: layout usable (≤1024px) ========== */
+        .menu-mobile-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 199;
+            background: rgba(15, 23, 42, 0.5);
+            backdrop-filter: blur(3px);
+            -webkit-backdrop-filter: blur(3px);
+            -webkit-tap-highlight-color: transparent;
+        }
+        .menu-mobile-backdrop.is-open {
+            display: block !important;
+        }
+        @media (min-width: 1025px) {
+            .menu-mobile-backdrop {
+                display: none !important;
+            }
+        }
+        @media (max-width: 1024px) {
+            .main-content {
+                margin-left: 0 !important;
+                max-width: 100vw !important;
+                width: 100%;
+                padding-top: 3.35rem;
+                padding-left: max(0.6rem, env(safe-area-inset-left, 0px));
+                padding-right: max(0.6rem, env(safe-area-inset-right, 0px));
+                padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px));
+            }
+            .main-content.menu-collapsed {
+                margin-left: 0 !important;
+                max-width: 100vw !important;
+            }
+            .tabs {
+                width: min(300px, 90vw) !important;
+                max-width: min(300px, 90vw);
+                z-index: 220;
+                box-shadow: 6px 0 32px rgba(0, 0, 0, 0.2);
+            }
+            [data-theme="dark"] .tabs {
+                box-shadow: 6px 0 36px rgba(0, 0, 0, 0.5);
+            }
+            .tabs.collapsed {
+                transform: translateX(-100%);
+                box-shadow: none;
+            }
+            .menu-toggle-btn {
+                left: max(0.65rem, env(safe-area-inset-left, 0px)) !important;
+                top: max(0.65rem, env(safe-area-inset-top, 0px)) !important;
+                right: auto !important;
+                z-index: 230;
+                min-width: 44px;
+                min-height: 44px;
+                touch-action: manipulation;
+            }
+            .dashboard2-banner-inner {
+                padding-left: 0.35rem !important;
+                padding-right: 0.35rem !important;
+            }
+            .dashboard2-body {
+                padding-left: 0.35rem !important;
+                padding-right: 0.35rem !important;
+            }
+            .dashboard2-charts-grid {
+                grid-template-columns: 1fr !important;
+                gap: 0.75rem !important;
+            }
+            .dashboard2-extra-grid {
+                grid-template-columns: 1fr !important;
+            }
+            .dashboard2-kpi-row {
+                grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)) !important;
+            }
+            .tab-button {
+                min-height: 44px;
+                padding: 0.75rem 1rem;
+                align-items: center;
+            }
+            .notif-bell-wrap {
+                top: max(0.55rem, env(safe-area-inset-top, 0px)) !important;
+                right: max(0.55rem, env(safe-area-inset-right, 0px)) !important;
+                z-index: 235;
+            }
+            .notif-bell {
+                min-width: 44px;
+                min-height: 44px;
+            }
+        }
+        @media (max-width: 640px) {
+            .main-content {
+                padding-top: 3.1rem;
+                padding-left: max(0.45rem, env(safe-area-inset-left, 0px));
+                padding-right: max(0.45rem, env(safe-area-inset-right, 0px));
+            }
+            .dashboard2-banner-top {
+                flex-direction: column;
+                align-items: stretch !important;
+            }
+            .dashboard2-btn-link {
+                width: 100%;
+                justify-content: center;
+                text-align: center;
+                margin-top: 0.35rem;
+            }
+            .dashboard2-titulo {
+                font-size: 1.05rem;
+            }
+            .tab-content {
+                padding-left: 0.5rem !important;
+                padding-right: 0.5rem !important;
+            }
+            .form-section {
+                padding: 1rem 0.85rem !important;
+            }
+        }
+        @media (max-width: 1024px) and (orientation: landscape) {
+            .main-content {
+                padding-top: 2.85rem;
+            }
+        }
+
         /* Scrollbar styling */
         ::-webkit-scrollbar {
             width: 8px;
@@ -3273,6 +3394,7 @@
                 <img src="https://img.mailinblue.com/8323725/images/content_library/original/69ba11d918850cebd86808f2.png" alt="Desarrollo" width="273" height="90" loading="lazy" decoding="async">
             </div>
         </div>
+        <div id="menuMobileBackdrop" class="menu-mobile-backdrop" aria-hidden="true"></div>
 
         <div class="main-content" id="mainContent">
             <button class="menu-toggle-btn" id="menuToggleBtn" title="Mostrar/Ocultar Menú">
@@ -24260,84 +24382,117 @@
                 const menuToggleBtn = document.getElementById('menuToggleBtn');
                 const tabsMenu = document.getElementById('tabsMenu');
                 const mainContent = document.getElementById('mainContent');
-                
-                // Función para toggle del menú
+                const menuMobileBackdrop = document.getElementById('menuMobileBackdrop');
+                const mqMobileMenu = window.matchMedia('(max-width: 1024px)');
+
+                function syncMenuBackdrop() {
+                    if (!menuMobileBackdrop || !tabsMenu) return;
+                    if (mqMobileMenu.matches && !tabsMenu.classList.contains('collapsed')) {
+                        menuMobileBackdrop.classList.add('is-open');
+                        menuMobileBackdrop.setAttribute('aria-hidden', 'false');
+                    } else {
+                        menuMobileBackdrop.classList.remove('is-open');
+                        menuMobileBackdrop.setAttribute('aria-hidden', 'true');
+                    }
+                }
+
+                function applyMenuLayoutForViewport() {
+                    if (!tabsMenu || !mainContent) return;
+                    if (mqMobileMenu.matches) {
+                        tabsMenu.classList.add('collapsed');
+                        mainContent.classList.add('menu-collapsed');
+                    } else {
+                        var collapsed = localStorage.getItem('menuCollapsed') === 'true';
+                        if (collapsed) {
+                            tabsMenu.classList.add('collapsed');
+                            mainContent.classList.add('menu-collapsed');
+                        } else {
+                            tabsMenu.classList.remove('collapsed');
+                            mainContent.classList.remove('menu-collapsed');
+                        }
+                    }
+                    syncMenuBackdrop();
+                    updateToggleButtonPosition();
+                }
+
+                function closeMobileDrawer() {
+                    if (!mqMobileMenu.matches || !tabsMenu || !mainContent) return;
+                    if (!tabsMenu.classList.contains('collapsed')) {
+                        tabsMenu.classList.add('collapsed');
+                        mainContent.classList.add('menu-collapsed');
+                        localStorage.setItem('menuCollapsed', 'true');
+                        syncMenuBackdrop();
+                        updateToggleButtonPosition();
+                    }
+                }
+
                 function toggleMenu() {
                     if (tabsMenu && mainContent) {
                         tabsMenu.classList.toggle('collapsed');
                         mainContent.classList.toggle('menu-collapsed');
-                        
-                        // Guardar estado en localStorage
-                        const isCollapsed = tabsMenu.classList.contains('collapsed');
-                        localStorage.setItem('menuCollapsed', isCollapsed);
-                        
-                        // Actualizar posición del botón
+                        localStorage.setItem('menuCollapsed', tabsMenu.classList.contains('collapsed'));
                         updateToggleButtonPosition();
+                        syncMenuBackdrop();
                     }
                 }
-                
-                // Función para actualizar posición del botón toggle
+
                 function updateToggleButtonPosition() {
-                    if (menuToggleBtn && tabsMenu) {
-                        if (tabsMenu.classList.contains('collapsed')) {
-                            menuToggleBtn.style.left = '1rem';
-                            menuToggleBtn.innerHTML = '☰';
-                        } else {
-                            menuToggleBtn.style.left = 'calc(280px + 1rem)';
-                            menuToggleBtn.innerHTML = '✕';
-                        }
+                    if (!menuToggleBtn || !tabsMenu) return;
+                    if (mqMobileMenu.matches) {
+                        menuToggleBtn.style.left = '1rem';
+                        menuToggleBtn.innerHTML = tabsMenu.classList.contains('collapsed') ? '☰' : '✕';
+                    } else if (tabsMenu.classList.contains('collapsed')) {
+                        menuToggleBtn.style.left = '1rem';
+                        menuToggleBtn.innerHTML = '☰';
+                    } else {
+                        menuToggleBtn.style.left = 'calc(280px + 1rem)';
+                        menuToggleBtn.innerHTML = '✕';
                     }
                 }
-                
-                // Event listener para el botón toggle
+
                 if (menuToggleBtn) {
-                    menuToggleBtn.addEventListener('click', toggleMenu);
+                    menuToggleBtn.addEventListener('click', function (e) {
+                        e.stopPropagation();
+                        toggleMenu();
+                    });
                 }
-                
-                // Cargar estado guardado del menú
-                const menuCollapsed = localStorage.getItem('menuCollapsed') === 'true';
-                if (menuCollapsed && tabsMenu && mainContent) {
-                    tabsMenu.classList.add('collapsed');
-                    mainContent.classList.add('menu-collapsed');
+                if (menuMobileBackdrop) {
+                    menuMobileBackdrop.addEventListener('click', closeMobileDrawer);
                 }
-                
-                // Actualizar posición inicial del botón
-                updateToggleButtonPosition();
-                
-                // Ocultar menú automáticamente después de 3 segundos si no hay interacción
-                let menuAutoHideTimeout;
+                mqMobileMenu.addEventListener('change', applyMenuLayoutForViewport);
+                applyMenuLayoutForViewport();
+
+                var menuAutoHideTimeout;
                 function resetAutoHide() {
                     clearTimeout(menuAutoHideTimeout);
-                    menuAutoHideTimeout = setTimeout(() => {
+                    menuAutoHideTimeout = setTimeout(function () {
+                        if (mqMobileMenu.matches) return;
                         if (tabsMenu && !tabsMenu.classList.contains('collapsed')) {
                             toggleMenu();
                         }
-                    }, 3000); // 3 segundos
+                    }, 3000);
                 }
-                
-                // Resetear el timeout cuando hay interacción con el menú
                 if (tabsMenu) {
-                    tabsMenu.addEventListener('mouseenter', () => {
+                    tabsMenu.addEventListener('mouseenter', function () {
                         clearTimeout(menuAutoHideTimeout);
                     });
-                    
-                    tabsMenu.addEventListener('mouseleave', () => {
-                        resetAutoHide();
+                    tabsMenu.addEventListener('mouseleave', function () {
+                        if (!mqMobileMenu.matches) {
+                            resetAutoHide();
+                        }
                     });
-                    
-                    // Iniciar el auto-ocultar después de 3 segundos de carga
-                    setTimeout(() => {
-                        if (!menuCollapsed) {
+                    setTimeout(function () {
+                        if (!mqMobileMenu.matches && tabsMenu && !tabsMenu.classList.contains('collapsed')) {
                             resetAutoHide();
                         }
                     }, 3000);
                 }
-                
-                // Agregar event listeners a los botones de pestañas
-                const tabButtons = document.querySelectorAll('.tab-button[data-tab]');
-                tabButtons.forEach(button => {
-                    button.addEventListener('click', function() {
-                        const tabName = this.getAttribute('data-tab');
+
+                var tabButtons = document.querySelectorAll('.tab-button[data-tab]');
+                tabButtons.forEach(function (button) {
+                    button.addEventListener('click', function () {
+                        closeMobileDrawer();
+                        var tabName = button.getAttribute('data-tab');
                         window.showTab(tabName);
                     });
                 });

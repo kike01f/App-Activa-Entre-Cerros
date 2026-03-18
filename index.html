@@ -18043,20 +18043,24 @@
                             background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
                             padding: 25px 40px;
                             border-bottom: 2px solid #e5e7eb;
+                            text-align: left;
                         }
                         .info-grid { 
-                            display: table; 
+                            display: block; 
                             width: 100%; 
-                            border-collapse: separate;
-                            border-spacing: 0;
                         }
                         .info-row { 
-                            display: table-row; 
+                            display: flex; 
+                            flex-direction: row;
+                            align-items: center;
+                            margin-bottom: 8px;
+                            text-align: left;
                         }
                         .info-cell { 
-                            display: table-cell; 
-                            padding: 12px 20px;
+                            display: inline-block; 
+                            padding: 8px 15px 8px 0;
                             vertical-align: middle;
+                            text-align: left;
                         }
                         .info-label { 
                             font-weight: 700; 
@@ -18065,11 +18069,13 @@
                             text-transform: uppercase;
                             letter-spacing: 0.5px;
                             min-width: 140px;
+                            text-align: left;
                         }
                         .info-value { 
                             color: #111827; 
                             font-size: 14px;
                             font-weight: 600;
+                            text-align: left;
                         }
                         .table-container {
                             padding: 30px 40px;
@@ -18174,20 +18180,22 @@
                                 <div class="info-row">
                                     <div class="info-cell info-label">Proyecto:</div>
                                     <div class="info-cell info-value">${nombreComunidad}</div>
+                                </div>
+                                <div class="info-row">
                                     <div class="info-cell info-label">Jefe de Edificio:</div>
                                     <div class="info-cell info-value">${jefeEdificio}</div>
                                 </div>
                                 <div class="info-row">
                                     <div class="info-cell info-label">Período:</div>
                                     <div class="info-cell info-value">${nombreMes}</div>
+                                </div>
+                                <div class="info-row">
                                     <div class="info-cell info-label">Deptos:</div>
                                     <div class="info-cell info-value">${numeroDeptos}</div>
                                 </div>
                                 <div class="info-row">
                                     <div class="info-cell info-label">Fecha de Generación:</div>
                                     <div class="info-cell info-value">${formatearFecha(obtenerFechaHoy())}</div>
-                                    <div class="info-cell"></div>
-                                    <div class="info-cell"></div>
                                 </div>
                             </div>
                         </div>
@@ -18497,8 +18505,8 @@
             datos.push(['REGISTRO DE MUDANZAS']);
             datos.push([]);
             
-            // Encabezado de tabla
-            datos.push(['Fecha', 'Residente', 'Depto', 'Tipo', 'Movimiento', 'Cobro', 'Monto', 'Corredor']);
+            // Encabezado de tabla (igual que gestion-wm.html: Fecha, Residente, Depto, Tipo, Movimiento, Cobro, Monto, Corredor, Observaciones)
+            datos.push(['Fecha', 'Residente', 'Depto', 'Tipo', 'Movimiento', 'Cobro', 'Monto', 'Corredor', 'Observaciones']);
             
             // Ordenar por fecha
             const mudanzasOrdenadas = [...mudanzas].sort((a, b) => {
@@ -18520,7 +18528,8 @@
                     movimientoTexto,
                     m.aplicaCobro === 'si' ? 'Sí' : 'No',
                     formatearMoneda(parseFloat(m.monto) || 0),
-                    m.corredor || '-'
+                    m.corredor || '-',
+                    m.observaciones || '-'
                 ]);
             });
             
@@ -18531,7 +18540,7 @@
             const ingresosTotales = mudanzasOrdenadas.filter(m => m && m.aplicaCobro === 'si').reduce((sum, m) => sum + (parseFloat(m.monto) || 0), 0);
             
             datos.push([]);
-            datos.push(['TOTALES', mudanzasOrdenadas.length, '', '', `${totalIngresos} / ${totalSalidas}`, mudanzasConCobro, formatearMoneda(ingresosTotales), '']);
+            datos.push(['TOTALES', mudanzasOrdenadas.length, '', '', `${totalIngresos} / ${totalSalidas}`, mudanzasConCobro, formatearMoneda(ingresosTotales), '', '']);
             
             return datos;
         }
@@ -18541,7 +18550,8 @@
             
             datos.push(['REGISTRO DE APERTURAS DE PUERTA']);
             datos.push([]);
-            datos.push(['Fecha', 'Hora', 'Residente', 'Depto', 'Cobro', 'Monto']);
+            // Igual que gestion-wm.html: Fecha, Hora, Residente, Depto, Cobro, Monto, Respaldo
+            datos.push(['Fecha', 'Hora', 'Residente', 'Depto', 'Cobro', 'Monto', 'Respaldo']);
             
             const aperturasOrdenadas = [...aperturas].sort((a, b) => {
                 const fechaA = a && a.fecha ? new Date(a.fecha) : new Date(0);
@@ -18551,13 +18561,17 @@
             
             aperturasOrdenadas.forEach((a) => {
                 if (!a) return;
+                // Verificar si hay link o archivos de respaldo
+                const tieneRespaldo = (a.link && a.link.trim() !== '') || (a.archivos && Array.isArray(a.archivos) && a.archivos.length > 0);
+                const respaldoTexto = tieneRespaldo ? 'Sí' : 'No';
                 datos.push([
                     a.fecha ? formatearFecha(a.fecha) : '-',
                     a.hora || '-',
                     a.nombre || '-',
                     a.departamento || '-',
                     a.aplicaCobro === 'si' ? 'Sí' : 'No',
-                    formatearMoneda(parseFloat(a.monto) || 0)
+                    formatearMoneda(parseFloat(a.monto) || 0),
+                    respaldoTexto
                 ]);
             });
             
@@ -18565,7 +18579,7 @@
             const ingresosTotales = aperturasOrdenadas.filter(a => a && a.aplicaCobro === 'si').reduce((sum, a) => sum + (parseFloat(a.monto) || 0), 0);
             
             datos.push([]);
-            datos.push(['TOTALES', '', '', '', aperturasConCobro, formatearMoneda(ingresosTotales)]);
+            datos.push(['TOTALES', '', '', '', aperturasConCobro, formatearMoneda(ingresosTotales), '']);
             
             return datos;
         }
@@ -18651,7 +18665,9 @@
             
             datos.push(['REGISTRO DE MULTAS']);
             datos.push([]);
-            datos.push(['Fecha', 'Residente', 'Depto', 'Motivo', 'Monto', 'Unidad']);
+            // Igual que gestion-wm.html: Fecha, Residente, Depto, Motivo, Monto, Respaldo
+            // El monto incluye el tipo de unidad (UF/UTM) en el formato
+            datos.push(['Fecha', 'Residente', 'Depto', 'Motivo', 'Monto', 'Respaldo']);
             
             const multasOrdenadas = [...multas].sort((a, b) => {
                 const fechaA = a && a.fecha ? new Date(a.fecha) : new Date(0);
@@ -18661,13 +18677,24 @@
             
             multasOrdenadas.forEach((m) => {
                 if (!m) return;
+                // Formatear monto con tipo de unidad
+                const montoNum = parseFloat(m.monto) || 0;
+                const tipoUnidad = m.tipoUnidad || 'UF';
+                const montoFormateado = `${montoNum} ${tipoUnidad}`;
+                
+                // Verificar si hay evidencias o archivos de respaldo
+                const tieneRespaldo = (m.evidencias && Array.isArray(m.evidencias) && m.evidencias.length > 0) || 
+                                     (m.links && Array.isArray(m.links) && m.links.length > 0) ||
+                                     (m.archivos && Array.isArray(m.archivos) && m.archivos.length > 0);
+                const respaldoTexto = tieneRespaldo ? 'Sí' : 'No';
+                
                 datos.push([
                     m.fecha ? formatearFecha(m.fecha) : '-',
                     m.nombre || '-',
                     m.departamento || '-',
                     m.motivo || '-',
-                    parseFloat(m.monto) || 0,
-                    m.tipoUnidad || 'UF'
+                    montoFormateado,
+                    respaldoTexto
                 ]);
             });
             
@@ -18679,7 +18706,8 @@
             
             datos.push(['REGISTRO DE MOROSOS']);
             datos.push([]);
-            datos.push(['Fecha', 'Depto', 'Estado', 'Monto', 'Periodos vencidos', 'Servicio Eléctrico']);
+            // Igual que gestion-wm.html: Fecha, Depto, Estado, Monto Deuda, Periodos vencidos, Servicio Eléctrico
+            datos.push(['Fecha', 'Depto', 'Estado', 'Monto Deuda', 'Periodos vencidos', 'Servicio Eléctrico']);
             
             const morososOrdenados = [...morosos].sort((a, b) => {
                 const fechaA = a && a.fecha ? new Date(a.fecha) : new Date(0);
@@ -18754,7 +18782,8 @@
             
             datos.push(['LECTURAS DE AGUA CALIENTE']);
             datos.push([]);
-            datos.push(['Unidad', 'Lectura Anterior', 'Lectura Actual', 'Consumo']);
+            // Igual que gestion-wm.html: Unidad, Mes, Lectura Anterior, Lectura Actual, Consumo Total
+            datos.push(['Unidad', 'Mes', 'Lectura Anterior', 'Lectura Actual', 'Consumo Total']);
             
             const lecturasValidas = Array.isArray(lecturas) ? lecturas.filter(l => {
                 const unidad = (l.unidad || '').toString().trim();
@@ -18784,8 +18813,14 @@
                 const consumoNum = l.consumo !== null && l.consumo !== undefined && l.consumo !== '' 
                     ? preservarFormatoNumero(l.consumo)
                     : preservarFormatoNumero(Math.max(0, lecturaActualNum - lecturaAnteriorNum));
+                
+                // Obtener el mes de la lectura
+                const mesLectura = l.mes || obtenerMesActual();
+                const nombreMes = obtenerNombreMes(mesLectura);
+                
                 datos.push([
                     l.unidad || '-',
+                    nombreMes,
                     formatearNumeroConComa(lecturaAnteriorNum),
                     formatearNumeroConComa(lecturaActualNum),
                     formatearNumeroConComa(consumoNum)
@@ -18802,7 +18837,7 @@
             }, 0);
             
             datos.push([]);
-            datos.push(['TOTALES', '', '', formatearNumeroConComa(consumoTotal)]);
+            datos.push(['TOTALES', '', '', '', formatearNumeroConComa(consumoTotal)]);
             
             return datos;
         }

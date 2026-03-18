@@ -3114,6 +3114,14 @@
         @media (max-width: 480px) {
             .login-dev-logo img { max-width: min(109px, 49vw); }
         }
+        .login-dev-logo-copyright {
+            margin-top: -0.9rem;
+            text-align: center;
+            font-size: 0.7rem;
+            color: rgba(226, 232, 240, 0.6);
+            font-family: 'DM Sans', system-ui, sans-serif;
+            line-height: 1.4;
+        }
         /* Modal información desarrollador (login) */
         .login-dev-modal[hidden] {
             display: none !important;
@@ -3271,17 +3279,20 @@
                 </div>
             </form>
         </div>
-            <button type="button" class="login-dev-logo" id="loginDevLogoBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="loginDevModalPanel" title="Información de desarrollo">
+            <button type="button" class="login-dev-logo" id="loginDevLogoBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="loginDevModalPanel" title="Información del proveedor">
                 <img src="https://img.mailinblue.com/8323725/images/content_library/original/69ba11d918850cebd86808f2.png" alt="Elevate — más información" width="273" height="90" loading="lazy" decoding="async">
             </button>
+            <p class="login-dev-logo-copyright">© Todos los Derechos Reservados Elevate 2026</p>
         </div>
     </div>
     <div id="loginDevModal" class="login-dev-modal" hidden aria-hidden="true">
         <div class="login-dev-modal__backdrop" id="loginDevModalBackdrop" aria-hidden="true"></div>
         <div class="login-dev-modal__panel" id="loginDevModalPanel" role="dialog" aria-modal="true" aria-labelledby="loginDevModalTitle">
             <button type="button" class="login-dev-modal__close" id="loginDevModalClose" aria-label="Cerrar">×</button>
-            <h2 class="login-dev-modal__title" id="loginDevModalTitle">Desarrollo <span>software</span></h2>
-            <p class="login-dev-modal__text">Para más información de desarrollo de software, contactar al correo:</p>
+            <h2 class="login-dev-modal__title" id="loginDevModalTitle">Información del <span>proveedor</span></h2>
+            <p class="login-dev-modal__text">Este sistema de gestión ha sido desarrollado por <strong>Elevate</strong>.</p>
+            <p class="login-dev-modal__text" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(117, 187, 33, 0.15);"><strong>¿Necesita ayuda o tiene problemas técnicos?</strong><br>Contacte a nuestro equipo de soporte técnico.</p>
+            <p class="login-dev-modal__text" style="margin-top: 0.75rem;">Para consultas sobre desarrollo de software:</p>
             <a class="login-dev-modal__mail" href="mailto:elevate.contactos@gmail.com">elevate.contactos@gmail.com</a>
             <p class="login-dev-modal__hint">Pulse fuera de esta ventana o en × para cerrar.</p>
         </div>

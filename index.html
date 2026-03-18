@@ -14901,6 +14901,52 @@
             'manual-usuario': { nombre: 'Manual de Usuario', icono: '📖', tab: 'manual-usuario' }
         };
 
+        function dashboardTarjetaTabPorTitulo(title) {
+            if (!title) return null;
+            var map = {
+                'Mudanzas': 'mudanzas',
+                'Aperturas': 'aperturas',
+                'Tarjetas/TAG': 'tarjetas',
+                'Espacios': 'espacios',
+                'Multas': 'multas',
+                'Morosos': 'morosos',
+                'Ocupación': 'ocupacionResidentes',
+                'Caja Chica': 'caja',
+                'Mantenciones': 'mantenciones',
+                'Proveedores': 'mantenciones',
+                'Aseos Pendientes': 'pagos-aseo',
+                'Pedido de Insumos': 'insumos',
+                'Lecturas Agua Caliente': 'lecturasAgua',
+                'Última Nómina': 'nomina',
+                'Postventa': 'postventa',
+                'Balance Neto': 'dashboard'
+            };
+            return map[title] || null;
+        }
+        window.dashboardTarjetaTabPorTitulo = dashboardTarjetaTabPorTitulo;
+
+        function bindIndexDashboardKpiClicks() {
+            var kpiRowEl = document.querySelector('#dashboard .dashboard2-block--kpis .dashboard2-kpi-row');
+            if (!kpiRowEl || kpiRowEl.dataset.tabClickBound) return;
+            kpiRowEl.dataset.tabClickBound = '1';
+            var kpiTabList = ['dashboard', 'caja', 'dashboard'];
+            var kpiHintList = ['Ver panel de control', 'Ir a Caja chica', 'Ver panel de control'];
+            var kpiNodes = kpiRowEl.querySelectorAll('.dashboard2-kpi');
+            for (var kix = 0; kix < kpiNodes.length && kix < kpiTabList.length; kix++) {
+                (function (tabGo, hint) {
+                    kpiNodes[kix].style.cursor = 'pointer';
+                    kpiNodes[kix].setAttribute('title', hint);
+                    kpiNodes[kix].setAttribute('role', 'button');
+                    kpiNodes[kix].setAttribute('tabindex', '0');
+                    kpiNodes[kix].onclick = function () { if (typeof window.showTab === 'function') window.showTab(tabGo); };
+                    kpiNodes[kix].onkeydown = function (ke) {
+                        if (ke.key === 'Enter' || ke.key === ' ') { ke.preventDefault(); if (typeof window.showTab === 'function') window.showTab(tabGo); }
+                    };
+                })(kpiTabList[kix], kpiHintList[kix]);
+            }
+        }
+        window.bindIndexDashboardKpiClicks = bindIndexDashboardKpiClicks;
+
         // Función para obtener módulos visibles (por defecto todos)
         async function obtenerModulosVisibles() {
             try {
@@ -22080,6 +22126,13 @@
             }
             }
 
+            stats.forEach(function (st) {
+                if (!st.onClickTab) {
+                    var t = dashboardTarjetaTabPorTitulo(st.title);
+                    if (t) st.onClickTab = t;
+                }
+            });
+
             // Cache para optimizar arranque y cambio de pestaña (igual que gestion-wm)
             window.dashboardData = {
                 totalIngresos,
@@ -22157,9 +22210,12 @@
                 const iconoSVG = obtenerIconoSVG(iconoTipo);
                 const subHTML = stat.subtitle ? `<div class="dashboard2-card-sub">${stat.subtitle}</div>` : '';
                 const dataAttrs = `data-value="${valorNumerico}" data-es-moneda="${esMoneda}"${esValorConSufijo ? ` data-texto-final="${String(valorFinalMostrar).replace(/"/g, '&quot;')}"` : ''}`;
-                
+                const _tab = stat.onClickTab ? String(stat.onClickTab).replace(/\\/g, '').replace(/'/g, '') : '';
+                const _click = _tab
+                    ? ` style="cursor:pointer" role="button" tabindex="0" onclick="if(typeof window.showTab==='function')window.showTab('${_tab}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();if(typeof window.showTab==='function')window.showTab('${_tab}');}" title="Ir al módulo"`
+                    : '';
                 // Mismo diseño que gestion-wm: tarjetas oscuras dashboard2-card
-                return `<div class="dashboard2-card ${stat.iconClass || ''}">${semaforoHTML}<div class="dashboard2-card-icon-wrap">${iconoSVG}</div><div class="dashboard2-card-title">${stat.title || ''}</div><div class="dashboard2-card-value dashboard-card-value" ${dataAttrs}>${valorFinalMostrar}</div>${subHTML}</div>`;
+                return `<div class="dashboard2-card ${stat.iconClass || ''}"${_click}>${semaforoHTML}<div class="dashboard2-card-icon-wrap">${iconoSVG}</div><div class="dashboard2-card-title">${stat.title || ''}</div><div class="dashboard2-card-value dashboard-card-value" ${dataAttrs}>${valorFinalMostrar}</div>${subHTML}</div>`;
             }).join('');
             
             // Mostrar u ocultar secciones del panel según módulos visibles (IDs igual que gestion-wm)
@@ -22182,6 +22238,7 @@
             setTimeout(() => {
                 animarContadores();
             }, 300);
+            if (typeof bindIndexDashboardKpiClicks === 'function') bindIndexDashboardKpiClicks();
             
             // Actualizar expresión de Arturito según el estado del dashboard
             actualizarExpresionArturito(mantencionesVencidas, balanceNeto, totalMudanzas, totalAperturas);
@@ -22296,6 +22353,7 @@
                 balanceNetoEl.setAttribute('data-valor', String(d.balanceNeto || 0));
                 balanceNetoEl.style.color = (d.balanceNeto || 0) >= 0 ? 'var(--primary)' : '#dc2626';
             }
+            if (typeof bindIndexDashboardKpiClicks === 'function') bindIndexDashboardKpiClicks();
             var statsDiv = document.getElementById('dashboardStats');
             if (statsDiv && d.stats && d.stats.length) {
                 statsDiv.innerHTML = d.stats.map(function(stat, index) {
@@ -22327,7 +22385,9 @@
                     if (typeof valorFinalMostrar === 'string' && (valorFinalMostrar.indexOf('%') !== -1 || valorFinalMostrar.indexOf('día') !== -1 || valorFinalMostrar.indexOf('Listo') !== -1 || valorFinalMostrar.indexOf('Vencido') !== -1)) {
                         textoFinalAttr = ' data-texto-final="' + String(valorFinalMostrar).replace(/"/g, '&quot;') + '"';
                     }
-                    return '<div class="dashboard2-card ' + (stat.iconClass || '') + '">' + semaforoHTML + '<div class="dashboard2-card-icon-wrap">' + iconoSVG + '</div><div class="dashboard2-card-title">' + (stat.title || '') + '</div><div class="dashboard2-card-value dashboard-card-value" data-value="' + valorNumerico + '" data-es-moneda="' + esMoneda + '"' + textoFinalAttr + '>' + valorFinalMostrar + '</div>' + subHTML + '</div>';
+                    var tabId = (stat.onClickTab && String(stat.onClickTab).replace(/\\/g, '').replace(/'/g, '')) || '';
+                    var tabClick = tabId ? ' style="cursor:pointer" role="button" tabindex="0" onclick="if(typeof window.showTab===\'function\')window.showTab(\'' + tabId + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();if(typeof window.showTab===\'function\')window.showTab(\'' + tabId + '\');}" title="Ir al módulo"' : '';
+                    return '<div class="dashboard2-card ' + (stat.iconClass || '') + '"' + tabClick + '>' + semaforoHTML + '<div class="dashboard2-card-icon-wrap">' + iconoSVG + '</div><div class="dashboard2-card-title">' + (stat.title || '') + '</div><div class="dashboard2-card-value dashboard-card-value" data-value="' + valorNumerico + '" data-es-moneda="' + esMoneda + '"' + textoFinalAttr + '>' + valorFinalMostrar + '</div>' + subHTML + '</div>';
                 }).join('');
                 setTimeout(function() {
                     var cards = statsDiv.querySelectorAll('.dashboard2-card');
@@ -24464,25 +24524,23 @@
 
                 var menuAutoHideTimeout;
                 function resetAutoHide() {
+                    if (mqMobileMenu.matches) return;
                     clearTimeout(menuAutoHideTimeout);
                     menuAutoHideTimeout = setTimeout(function () {
-                        if (mqMobileMenu.matches) return;
                         if (tabsMenu && !tabsMenu.classList.contains('collapsed')) {
                             toggleMenu();
                         }
                     }, 3000);
                 }
-                if (tabsMenu) {
+                if (tabsMenu && !mqMobileMenu.matches) {
                     tabsMenu.addEventListener('mouseenter', function () {
                         clearTimeout(menuAutoHideTimeout);
                     });
                     tabsMenu.addEventListener('mouseleave', function () {
-                        if (!mqMobileMenu.matches) {
-                            resetAutoHide();
-                        }
+                        resetAutoHide();
                     });
                     setTimeout(function () {
-                        if (!mqMobileMenu.matches && tabsMenu && !tabsMenu.classList.contains('collapsed')) {
+                        if (!tabsMenu.classList.contains('collapsed')) {
                             resetAutoHide();
                         }
                     }, 3000);

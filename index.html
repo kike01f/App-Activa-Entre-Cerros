@@ -2635,37 +2635,6 @@
             0% { transform: translate(-50%, -50%) scale(1); }
             100% { transform: translate(calc(-50% - 0.6%), calc(-50% - 0.4%)) scale(1.028); }
         }
-        .login-drift {
-            position: absolute;
-            inset: 0;
-            z-index: 3;
-            pointer-events: none;
-            overflow: hidden;
-        }
-        .login-drift i {
-            position: absolute;
-            width: 5px;
-            height: 5px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.35);
-            box-shadow: 0 0 14px rgba(148, 163, 184, 0.35), 0 0 28px rgba(100, 116, 139, 0.15);
-            animation: login-spark 5s ease-in-out infinite;
-            opacity: 0;
-        }
-        .login-drift i:nth-child(1) { left: 8%; top: 22%; animation-delay: 0s; }
-        .login-drift i:nth-child(2) { left: 18%; top: 78%; animation-delay: 0.8s; width: 3px; height: 3px; }
-        .login-drift i:nth-child(3) { right: 12%; top: 15%; animation-delay: 1.6s; }
-        .login-drift i:nth-child(4) { right: 22%; top: 55%; animation-delay: 2.4s; width: 4px; height: 4px; }
-        .login-drift i:nth-child(5) { left: 42%; top: 12%; animation-delay: 3.2s; }
-        .login-drift i:nth-child(6) { right: 38%; bottom: 18%; animation-delay: 4s; width: 3px; height: 3px; }
-        .login-drift i:nth-child(7) { left: 28%; top: 48%; animation-delay: 2s; }
-        .login-drift i:nth-child(8) { right: 8%; bottom: 28%; animation-delay: 3.6s; }
-        @keyframes login-spark {
-            0%, 100% { opacity: 0; transform: translateY(8px) scale(0.6); }
-            15% { opacity: 1; }
-            50% { opacity: 0.85; transform: translateY(-18px) scale(1); }
-            85% { opacity: 0.4; transform: translateY(-32px) scale(0.8); }
-        }
         #loginScreen::before {
             content: '';
             position: absolute;
@@ -2688,52 +2657,9 @@
             pointer-events: none;
             opacity: 1;
         }
-        .login-orb {
-            position: absolute;
-            border-radius: 50%;
-            filter: blur(64px);
-            pointer-events: none;
-            z-index: 2;
-        }
-        .login-orb--1 {
-            width: min(420px, 55vw);
-            height: min(420px, 55vw);
-            background: rgba(100, 116, 139, 0.14);
-            top: -12%;
-            right: -8%;
-            animation: login-float 14s ease-in-out infinite;
-        }
-        .login-orb--2 {
-            width: min(320px, 45vw);
-            height: min(320px, 45vw);
-            background: rgba(71, 85, 105, 0.12);
-            bottom: -10%;
-            left: -5%;
-            animation: login-float 18s ease-in-out infinite reverse;
-        }
-        .login-orb--3 {
-            width: min(200px, 30vw);
-            height: min(200px, 30vw);
-            background: rgba(148, 163, 184, 0.1);
-            top: 40%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            animation: login-float-slow 22s ease-in-out infinite;
-        }
-        @keyframes login-float {
-            0%, 100% { transform: translate(0, 0) scale(1); }
-            50% { transform: translate(16px, -20px) scale(1.08); }
-        }
-        @keyframes login-float-slow {
-            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.7; }
-            50% { transform: translate(calc(-50% + 24px), calc(-50% - 14px)) scale(1.15); opacity: 1; }
-        }
         @media (prefers-reduced-motion: reduce) {
             .login-screen-photo__img { animation: none !important; transform: translate(-50%, -50%) scale(1) !important; }
-            .login-drift i { animation: none; opacity: 0.35; transform: none; }
             #loginScreen::before { animation: none; }
-            .login-orb--1, .login-orb--2, .login-orb--3 { animation: none; }
-            .login-orb--3 { transform: translate(-50%, -50%); }
             .login-box { animation: none !important; }
             .login-brand-icon { animation: none !important; }
             .login-box h1 { animation: none !important; }
@@ -2983,12 +2909,28 @@
             display: none;
         }
         .login-reset-success.visible { display: block; }
-        /* Marca desarrollador — fuera de la tarjeta, centrada debajo */
-        .login-dev-logo {
-            margin-top: -0.15rem;
+        /* Marca desarrollador — clicable, fuera de la tarjeta */
+        button.login-dev-logo {
+            margin: -0.15rem auto 0;
+            padding: 0.2rem;
             text-align: center;
             line-height: 0;
-            width: 100%;
+            width: auto;
+            max-width: 100%;
+            display: block;
+            background: none;
+            border: none;
+            cursor: pointer;
+            border-radius: 14px;
+            transition: transform 0.2s ease, opacity 0.2s ease;
+        }
+        button.login-dev-logo:hover {
+            transform: scale(1.05);
+            opacity: 1;
+        }
+        button.login-dev-logo:focus-visible {
+            outline: 2px solid rgba(117, 187, 33, 0.65);
+            outline-offset: 3px;
         }
         .login-dev-logo img {
             display: block;
@@ -2999,9 +2941,106 @@
             object-fit: contain;
             opacity: 0.95;
             filter: brightness(0) invert(1);
+            pointer-events: none;
         }
         @media (max-width: 480px) {
             .login-dev-logo img { max-width: min(109px, 49vw); }
+        }
+        /* Modal información desarrollador (login) */
+        .login-dev-modal[hidden] {
+            display: none !important;
+        }
+        .login-dev-modal:not([hidden]) {
+            position: fixed;
+            inset: 0;
+            z-index: 99999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.25rem;
+            font-family: 'DM Sans', system-ui, sans-serif;
+        }
+        .login-dev-modal__backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(8, 12, 20, 0.65);
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+        }
+        .login-dev-modal__panel {
+            position: relative;
+            z-index: 1;
+            max-width: 22rem;
+            width: 100%;
+            padding: 1.35rem 1.35rem 1.25rem;
+            border-radius: 18px;
+            background: rgba(24, 32, 44, 0.97);
+            border: 1px solid rgba(117, 187, 33, 0.22);
+            box-shadow:
+                0 0 0 1px rgba(0, 0, 0, 0.2) inset,
+                0 24px 48px rgba(0, 0, 0, 0.45),
+                0 0 40px -12px rgba(117, 187, 33, 0.12);
+        }
+        .login-dev-modal__close {
+            position: absolute;
+            top: 0.65rem;
+            right: 0.65rem;
+            width: 2rem;
+            height: 2rem;
+            padding: 0;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.06);
+            color: rgba(226, 232, 240, 0.85);
+            font-size: 1.25rem;
+            line-height: 1;
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+        .login-dev-modal__close:hover {
+            background: rgba(117, 187, 33, 0.15);
+            color: #ecfccb;
+        }
+        .login-dev-modal__title {
+            font-family: 'Syne', system-ui, sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+            color: #f8fafc;
+            margin: 0 0 0.85rem 0;
+            padding-right: 1.75rem;
+            letter-spacing: -0.02em;
+        }
+        .login-dev-modal__title span {
+            color: rgba(190, 242, 100, 0.95);
+        }
+        .login-dev-modal__text {
+            margin: 0 0 1rem 0;
+            font-size: 0.9rem;
+            line-height: 1.55;
+            color: rgba(226, 232, 240, 0.82);
+        }
+        .login-dev-modal__mail {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #bef264;
+            text-decoration: none;
+            padding: 0.45rem 0.65rem;
+            margin: 0 -0.65rem;
+            border-radius: 10px;
+            transition: background 0.15s, color 0.15s;
+            word-break: break-all;
+        }
+        .login-dev-modal__mail:hover {
+            background: rgba(117, 187, 33, 0.12);
+            color: #d9f99d;
+        }
+        .login-dev-modal__hint {
+            margin: 0.85rem 0 0 0;
+            font-size: 0.75rem;
+            color: rgba(148, 163, 184, 0.65);
         }
         /* Marca desarrollador — final del menú lateral */
         .tabs-menu-dev-logo {
@@ -3032,12 +3071,6 @@
             <!-- Máxima nitidez: sustituye src por la misma gráfica exportada a ≥1920px (PNG/WebP). -->
             <img class="login-screen-photo__img" src="https://img.mailinblue.com/8323725/images/content_library/original/69ba0ab6cadac597b670124a.png" alt="" decoding="async" fetchpriority="high">
         </div>
-        <div class="login-drift" aria-hidden="true">
-            <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-        </div>
-        <span class="login-orb login-orb--1" aria-hidden="true"></span>
-        <span class="login-orb login-orb--2" aria-hidden="true"></span>
-        <span class="login-orb login-orb--3" aria-hidden="true"></span>
         <div class="login-screen-stack">
         <div class="login-box">
             <div class="login-brand">
@@ -3070,9 +3103,19 @@
                 </div>
             </form>
         </div>
-            <div class="login-dev-logo" aria-hidden="true">
-                <img src="https://img.mailinblue.com/8323725/images/content_library/original/69ba11d918850cebd86808f2.png" alt="" width="273" height="90" loading="lazy" decoding="async">
-            </div>
+            <button type="button" class="login-dev-logo" id="loginDevLogoBtn" aria-haspopup="dialog" aria-expanded="false" aria-controls="loginDevModalPanel" title="Información de desarrollo">
+                <img src="https://img.mailinblue.com/8323725/images/content_library/original/69ba11d918850cebd86808f2.png" alt="Elevate — más información" width="273" height="90" loading="lazy" decoding="async">
+            </button>
+        </div>
+    </div>
+    <div id="loginDevModal" class="login-dev-modal" hidden aria-hidden="true">
+        <div class="login-dev-modal__backdrop" id="loginDevModalBackdrop" aria-hidden="true"></div>
+        <div class="login-dev-modal__panel" id="loginDevModalPanel" role="dialog" aria-modal="true" aria-labelledby="loginDevModalTitle">
+            <button type="button" class="login-dev-modal__close" id="loginDevModalClose" aria-label="Cerrar">×</button>
+            <h2 class="login-dev-modal__title" id="loginDevModalTitle">Desarrollo <span>software</span></h2>
+            <p class="login-dev-modal__text">Para más información de desarrollo de software, contactar al correo:</p>
+            <a class="login-dev-modal__mail" href="mailto:elevate.contactos@gmail.com">elevate.contactos@gmail.com</a>
+            <p class="login-dev-modal__hint">Pulse fuera de esta ventana o en × para cerrar.</p>
         </div>
     </div>
     <div class="container" id="appContainer" style="display: none;">
@@ -6169,6 +6212,41 @@
             }
             if (forgotBtn) { forgotBtn.disabled = false; forgotBtn.textContent = '¿Olvidaste tu contraseña?'; }
         });
+
+        (function loginDevModalInit() {
+            var modal = document.getElementById('loginDevModal');
+            var openBtn = document.getElementById('loginDevLogoBtn');
+            var closeBtn = document.getElementById('loginDevModalClose');
+            var backdrop = document.getElementById('loginDevModalBackdrop');
+            var panel = document.getElementById('loginDevModalPanel');
+            if (!modal || !openBtn) return;
+            function openLoginDevModal() {
+                modal.hidden = false;
+                modal.setAttribute('aria-hidden', 'false');
+                openBtn.setAttribute('aria-expanded', 'true');
+                document.body.style.overflow = 'hidden';
+                if (closeBtn) closeBtn.focus();
+            }
+            function closeLoginDevModal() {
+                modal.hidden = true;
+                modal.setAttribute('aria-hidden', 'true');
+                openBtn.setAttribute('aria-expanded', 'false');
+                document.body.style.overflow = '';
+                openBtn.focus();
+            }
+            openBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                openLoginDevModal();
+            });
+            if (closeBtn) closeBtn.addEventListener('click', closeLoginDevModal);
+            if (backdrop) backdrop.addEventListener('click', closeLoginDevModal);
+            if (panel) {
+                panel.addEventListener('click', function(e) { e.stopPropagation(); });
+            }
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' && modal && !modal.hidden) closeLoginDevModal();
+            });
+        })();
 
         document.getElementById('btnLogout') && document.getElementById('btnLogout').addEventListener('click', function() {
             if (auth) {

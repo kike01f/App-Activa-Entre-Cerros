@@ -3043,6 +3043,52 @@
             display: none;
         }
         .login-error.visible { display: block; }
+        /* Aviso cuando la app se abre con file:// (Chrome + Firebase / iframes) */
+        .file-protocol-banner {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+            width: 100%;
+            padding: 10px 16px;
+            background: #422006;
+            color: #fef3c7;
+            font-size: 0.8125rem;
+            line-height: 1.45;
+            border-bottom: 1px solid #92400e;
+            box-sizing: border-box;
+        }
+        .file-protocol-banner.is-visible {
+            display: flex;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 99999;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+        }
+        .file-protocol-banner__code {
+            background: rgba(0, 0, 0, 0.25);
+            padding: 0.15rem 0.4rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            white-space: nowrap;
+        }
+        .file-protocol-banner__btn {
+            flex-shrink: 0;
+            background: #f59e0b;
+            color: #1c1917;
+            border: none;
+            padding: 0.4rem 0.75rem;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.8125rem;
+            cursor: pointer;
+        }
+        .file-protocol-banner__btn:hover {
+            filter: brightness(1.05);
+        }
         .login-forgot-wrap {
             text-align: center;
             margin-top: 1.25rem;
@@ -3296,6 +3342,10 @@
             <a class="login-dev-modal__mail" href="mailto:elevate.contactos@gmail.com">elevate.contactos@gmail.com</a>
             <p class="login-dev-modal__hint">Pulse fuera de esta ventana o en × para cerrar.</p>
         </div>
+    </div>
+    <div id="fileProtocolBanner" class="file-protocol-banner" role="status">
+        <span class="file-protocol-banner__text">Está abriendo la app con <strong>file://</strong> (doble clic al HTML). Chrome muestra advertencias y Firebase no puede usarse bien. En la carpeta del proyecto ejecute <code class="file-protocol-banner__code">python3 -m http.server 8080</code> y abra <strong>http://localhost:8080/index.html</strong> en el navegador.</span>
+        <button type="button" class="file-protocol-banner__btn" id="fileProtocolBannerClose" aria-label="Cerrar aviso">Entendido</button>
     </div>
     <div class="container" id="appContainer" style="display: none;">
         <!-- Campana de notificaciones fuera de main-content para que siempre sea visible -->
@@ -6276,13 +6326,16 @@
             appId: "1:546280897016:web:a170ddf420138c7c0e7e0d"
         };
 
-        // Inicializar Firebase
+        // Inicializar Firebase (no usar con file://: Chrome bloquea iframes/orígenes y Auth falla; además evita el error "Unsafe attempt to load URL file://...")
         let db = null;
         let auth = null;
         let firebaseInitialized = false;
+        window.GESTION_FILE_PROTOCOL = (typeof location !== 'undefined' && location.protocol === 'file:');
 
         try {
-            if (typeof firebase !== 'undefined') {
+            if (window.GESTION_FILE_PROTOCOL) {
+                console.warn('[Gestión Comunidad] Abra la app con un servidor HTTP local (ej. en la carpeta del proyecto: python3 -m http.server 8080) y use http://localhost:8080/index.html. Así Firebase y el navegador funcionan sin restricciones de file://.');
+            } else if (typeof firebase !== 'undefined') {
                 firebase.initializeApp(firebaseConfig);
                 db = firebase.firestore();
                 auth = firebase.auth();
@@ -6312,7 +6365,21 @@
         function showApp() {
             if (loginScreen) loginScreen.classList.add('hidden');
             if (appContainer) appContainer.style.display = 'flex';
+            if (window.GESTION_FILE_PROTOCOL) {
+                var ban = document.getElementById('fileProtocolBanner');
+                if (ban) ban.classList.add('is-visible');
+            }
         }
+
+        (function () {
+            var closeBtn = document.getElementById('fileProtocolBannerClose');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', function () {
+                    var b = document.getElementById('fileProtocolBanner');
+                    if (b) b.classList.remove('is-visible');
+                });
+            }
+        })();
 
         if (auth) {
             auth.onAuthStateChanged(function(user) {
@@ -10035,8 +10102,11 @@
             a.download = nombreArchivo;
             document.body.appendChild(a);
             a.click();
-            document.body.removeChild(a);
-            setTimeout(() => URL.revokeObjectURL(url), 100);
+            const urlLecturas = url;
+            setTimeout(() => {
+                a.remove();
+                URL.revokeObjectURL(urlLecturas);
+            }, 300);
             
             mostrarAlerta('Archivo Excel de lecturas de agua caliente descargado correctamente.', 'Éxito');
         }
@@ -11510,13 +11580,12 @@
                         }
                         body {
                             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-                            color: var(--text-primary);
+                            color: #1f2937;
                             line-height: 1.4;
                             margin: 0;
                             padding: 0.5rem;
                             font-size: 12px;
-                            background: var(--bg-primary);
-                            transition: background-color 0.3s ease, color 0.3s ease;
+                            background: #ffffff;
                         }
                         .header {
                             text-align: center;
@@ -11531,10 +11600,9 @@
                             margin: 0 0 0.25rem 0;
                         }
                         .header p {
-                            color: var(--text-tertiary);
+                            color: #6b7280;
                             font-size: 0.875rem;
                             margin: 0;
-                            transition: color 0.3s ease;
                         }
                         table {
                             width: 100%;
@@ -11544,24 +11612,21 @@
                         }
                         th {
                             background: linear-gradient(135deg, rgba(117, 187, 33, 0.2) 0%, rgba(117, 187, 33, 0.1) 100%);
-                            color: var(--text-primary);
+                            color: #1f2937;
                             padding: 0.5rem 0.375rem;
                             text-align: left;
                             font-weight: 700;
                             border-bottom: 2px solid #75bb21;
                             font-size: 10px;
-                            transition: color 0.3s ease;
                         }
                         td {
                             padding: 0.5rem 0.375rem;
-                            border-bottom: 1px solid var(--border-color);
+                            border-bottom: 1px solid #e5e7eb;
                             word-wrap: break-word;
-                            color: var(--text-secondary);
-                            transition: border-color 0.3s ease, color 0.3s ease;
+                            color: #374151;
                         }
                         tr:nth-child(even) {
-                            background: var(--bg-secondary);
-                            transition: background-color 0.3s ease;
+                            background: #f9fafb;
                         }
                         .prioridad-alta {
                             color: #ef4444;
@@ -11581,11 +11646,10 @@
                         .footer {
                             margin-top: 0.75rem;
                             padding-top: 0.5rem;
-                            border-top: 1px solid var(--border-color);
+                            border-top: 1px solid #e5e7eb;
                             text-align: center;
-                            color: var(--text-tertiary);
+                            color: #6b7280;
                             font-size: 10px;
-                            transition: border-color 0.3s ease, color 0.3s ease;
                         }
                         @media print {
                             body {
@@ -11619,14 +11683,21 @@
                         <tbody>
             `;
             
+            const escHtmlInsumo = (v) => {
+                if (v === null || v === undefined) return '';
+                return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            };
             insumos.forEach(insumo => {
-                const prioridadClass = `prioridad-${insumo.prioridad.toLowerCase()}`;
-                const observacionesTexto = insumo.observaciones ? (insumo.observaciones.length > 50 ? insumo.observaciones.substring(0, 50) + '...' : insumo.observaciones) : '-';
+                const pri = (insumo.prioridad || 'Media').toString();
+                const prioridadClass = `prioridad-${pri.toLowerCase()}`;
+                let obs = insumo.observaciones ? String(insumo.observaciones) : '';
+                if (obs.length > 50) obs = obs.substring(0, 50) + '...';
+                const observacionesTexto = obs ? escHtmlInsumo(obs) : '-';
                 html += `
                     <tr>
-                        <td style="font-weight: 500;">${insumo.nombre}</td>
-                        <td style="text-align: center; font-weight: 600;">${insumo.cantidad}</td>
-                        <td class="${prioridadClass}" style="text-align: center;">${insumo.prioridad}</td>
+                        <td style="font-weight: 500;">${escHtmlInsumo(insumo.nombre)}</td>
+                        <td style="text-align: center; font-weight: 600;">${escHtmlInsumo(insumo.cantidad)}</td>
+                        <td class="${prioridadClass}" style="text-align: center;">${escHtmlInsumo(pri)}</td>
                         <td style="font-size: 10px;">${observacionesTexto}</td>
                     </tr>
                 `;
@@ -11645,18 +11716,24 @@
                 </html>
             `;
 
-            // Crear ventana para imprimir
-            const ventana = window.open('', '_blank');
-            ventana.document.write(html);
-            ventana.document.close();
-            
-            // Esperar a que se cargue el contenido antes de imprimir
-            ventana.onload = function() {
-                setTimeout(() => {
-                    ventana.print();
-                }, 250);
-            };
-        }
+            const nombreArchivo = `Pedido_Insumos_${nombreMes.replace(/\s+/g, '_')}_${year}.html`;
+            const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = nombreArchivo;
+            link.style.display = 'none';
+            document.body.appendChild(link);
+            link.click();
+            const urlPedido = url;
+            setTimeout(() => {
+                link.remove();
+                URL.revokeObjectURL(urlPedido);
+            }, 300);
+            mostrarAlerta(`Pedido descargado: ${nombreArchivo}\n\nÁbralo en el navegador e imprima o guarde como PDF si lo necesita.`, 'Descarga');
+        };
+
+        window.descargarPedidoInsumos = window.generarPedidoInsumosPDF;
 
         async function cargarCaja() {
             const movimientos = await obtenerDatosMes('caja');
@@ -17272,8 +17349,7 @@
                         html += 'a.download = "Comprobante_Salida_Mudanza_" + mudanza.id.substring(0, 8) + ".html";';
                         html += 'document.body.appendChild(a);';
                         html += 'a.click();';
-                        html += 'document.body.removeChild(a);';
-                        html += 'URL.revokeObjectURL(url);';
+                        html += 'setTimeout(function(){ if (a.parentNode) a.parentNode.removeChild(a); URL.revokeObjectURL(url); }, 300);';
                         html += '}';
                         html += '<\/script>';
                     } else {
@@ -18406,16 +18482,20 @@
                 </html>
                 `;
                 
-                // Crear blob y descargar
-                const blob = new Blob([excelContent], { type: 'application/vnd.ms-excel' });
+                // Crear blob y descargar (BOM UTF-8 + revocar URL tras un delay para no cortar la descarga)
+                const blob = new Blob(['\uFEFF' + excelContent], { type: 'application/vnd.ms-excel;charset=utf-8' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
                 link.href = url;
                 link.download = nombreArchivo;
+                link.style.display = 'none';
                 document.body.appendChild(link);
                 link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
+                const urlExcel = url;
+                setTimeout(() => {
+                    link.remove();
+                    URL.revokeObjectURL(urlExcel);
+                }, 300);
                 
                 ocultarProgreso();
                 mostrarAlerta('Archivo Excel descargado correctamente.', 'Éxito');
@@ -20049,10 +20129,14 @@
             link.href = url;
             const nombreArchivoFinal = esPrevisualizacion ? `PREVISUALIZACION_${nombreArchivo}` : nombreArchivo;
             link.download = `${nombreArchivoFinal}.html`;
+            link.style.display = 'none';
             document.body.appendChild(link);
             link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
+            const urlParaRevocar = url;
+            setTimeout(() => {
+                link.remove();
+                URL.revokeObjectURL(urlParaRevocar);
+            }, 300);
             
             if (esPrevisualizacion) {
                 mostrarAlerta(`Previsualización del informe descargada: ${nombreArchivoFinal}.html\n\nEste es un informe de prueba. El mes NO ha sido cerrado. Puede abrir el archivo en su navegador e imprimirlo o guardarlo como PDF desde el menú de impresión.`, 'Previsualización Descargada');
@@ -26957,11 +27041,11 @@
                 document.body.appendChild(link);
                 link.click();
                 
-                // Limpiar después de un breve delay
+                // Limpiar después de un breve delay (evita revocar el blob antes de que termine la descarga)
                 setTimeout(() => {
-                    document.body.removeChild(link);
+                    link.remove();
                     window.URL.revokeObjectURL(url);
-                }, 100);
+                }, 300);
                 
                 mostrarAlerta('Archivo Excel descargado correctamente.', 'Éxito');
             } catch (error) {

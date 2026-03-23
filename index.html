@@ -20270,26 +20270,37 @@
             descargarReporteHTML(html, `Reporte_Caja_Chica_${nombreMes.replace(/\s+/g, '_')}`, 'Reporte de Caja Chica');
         }
 
-        // Función para generar reporte de Mantenciones en PDF (puede usar mes actual o archivado)
+        // Reporte PDF/HTML del módulo Mantenciones (mes archivado, actual o reabierto)
         async function generarReporteMantencionesPDF(mesAnio, nombreMes, usarMesActual = false) {
-            // Verificar si el mes está reabierto: primero usar window.mesReabierto, luego verificar en Firestore/LocalStorage
+            const esc = (x) => String(x ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+            const trunc = (texto, max) => {
+                const s = String(texto ?? '');
+                return s.length <= max ? s : s.slice(0, Math.max(0, max - 3)) + '...';
+            };
+            const labelTipoVisita = (tv) => {
+                if (tv === 'emergencia') return 'Emergencia';
+                if (tv === 'reparacion') return 'Reparación';
+                if (tv === 'extraordinaria') return 'Extraordinaria';
+                if (tv === 'normal') return 'Normal';
+                return tv ? esc(String(tv)) : '—';
+            };
+
             let esMesReabierto = window.mesReabierto && window.mesEnConsulta === mesAnio;
-            
-            // Si no está marcado como reabierto pero hay mes en consulta, verificar si tiene datos activos
             if (!esMesReabierto && window.mesEnConsulta === mesAnio && mesAnio !== obtenerMesActual()) {
-                // Verificar si hay datos activos en LocalStorage o Firestore (incluyendo configuraciones)
-                const modulos = ['mudanzas', 'aperturas', 'tarjetas', 'espacios', 'multas', 'morosos', 'ocupacion-residentes', 'caja', 'mantenciones'];
+                const modulos = ['mudanzas', 'aperturas', 'tarjetas', 'espacios', 'multas', 'morosos', 'ocupacion-residentes', 'caja', 'mantenciones', 'visitas-extraordinarias'];
                 const modulosConfig = ['mantenciones-config', 'caja-config'];
-                const tieneDatosActivos = modulos.some(modulo => {
-                    const datosActivos = localStorage.getItem(`${modulo}_${mesAnio}`);
-                    return datosActivos && datosActivos !== '[]';
+                const tieneDatosActivos = modulos.some((modulo) => {
+                    const raw = localStorage.getItem(`${modulo}_${mesAnio}`);
+                    return raw && raw !== '[]';
                 });
-                const tieneConfigActiva = modulosConfig.some(modulo => {
-                    const datosActivos = localStorage.getItem(`${modulo}_${mesAnio}`);
-                    return datosActivos && datosActivos !== '[]' && datosActivos !== 'null';
+                const tieneConfigActiva = modulosConfig.some((modulo) => {
+                    const raw = localStorage.getItem(`${modulo}_${mesAnio}`);
+                    return raw && raw !== '[]' && raw !== 'null';
                 });
-                
-                // También verificar en Firestore si está disponible
                 if ((!tieneDatosActivos && !tieneConfigActiva) && firebaseInitialized && db) {
                     try {
                         const docRef = db.collection('comunidad').doc(`mantenciones_${mesAnio}`);
@@ -20297,85 +20308,45 @@
                         if (doc.exists && doc.data().reabierto === true) {
                             esMesReabierto = true;
                         } else {
-                            // Verificar también configuraciones
                             const configRef = db.collection('comunidad').doc(`mantenciones-config_${mesAnio}`);
                             const configDoc = await configRef.get();
-                            if (configDoc.exists) {
-                                esMesReabierto = true;
-                            }
+                            if (configDoc.exists) esMesReabierto = true;
                         }
-                    } catch (e) {
-                        // Ignorar errores
-                    }
+                    } catch (e) { /* ignorar */ }
                 } else if (tieneDatosActivos || tieneConfigActiva) {
                     esMesReabierto = true;
                 }
             }
-            const mantenciones = (usarMesActual || esMesReabierto) ? await obtenerDatosMes('mantenciones') : await obtenerDatosArchivados('mantenciones', mesAnio);
-            // Obtener visitas extraordinarias del mes
-            const visitasExtraordinarias = (usarMesActual || esMesReabierto) ? await obtenerDatosMes('visitas-extraordinarias') : await obtenerDatosArchivados('visitas-extraordinarias', mesAnio);
-            const fechaHoy = formatearFecha(obtenerFechaHoy());
-            const hoy = new Date();
-            hoy.setHours(0, 0, 0, 0);
-            
-            // Obtener datos de personalización
+
+            const mesActualRef = obtenerMesActual();
+            const usarDatosVivos = usarMesActual || esMesReabierto || mesAnio === mesActualRef;
+            const mantenciones = usarDatosVivos
+                ? await obtenerDatosMes('mantenciones')
+                : await obtenerDatosArchivados('mantenciones', mesAnio);
+            const visitasExtraordinarias = usarDatosVivos
+                ? await obtenerDatosMes('visitas-extraordinarias')
+                : await obtenerDatosArchivados('visitas-extraordinarias', mesAnio);
+
             const personalizacion = await obtenerPersonalizacion();
-            const nombreComunidad = personalizacion.comunidad || 'Activa WM815';
-            const jefeEdificio = personalizacion.jefeEdificio || 'Angel Avendaño';
-            const numeroDeptos = personalizacion.deptos || '259';
+            const nombreComunidad = esc(personalizacion.comunidad || 'Activa WM815');
+            const jefeEdificio = esc(personalizacion.jefeEdificio || 'Angel Avendaño');
+            const numeroDeptos = esc(personalizacion.deptos || '259');
+            const fechaHoy = formatearFecha(obtenerFechaHoy());
 
-            // Calcular estadísticas detalladas
-            let mantencionesVencidas = [];
-            let mantencionesProximas = [];
-            let mantencionesAlDia = [];
-            const mantencionesPorProveedor = {};
-            const mantencionesPorServicio = {};
-            let totalDiasVencidas = 0;
-            let mantencionMasVencida = null;
-            let mantencionMasProxima = null;
-
-            // Usar solo la última mantención por proveedor para evitar contar mantenciones históricas como vencidas
-            // Incluir mantenciones normales y sin plazo (ambas se guardan en mantenciones)
-            const mantencionesFiltradas = mantenciones.filter(m => 
-                !m.tipoVisita || m.tipoVisita === 'normal' || m.tipoVisita === 'sin-plazo'
+            const filtroRegistroMant = (m) => !m.tipoVisita || m.tipoVisita === 'normal' || m.tipoVisita === 'sin-plazo';
+            const registrosMant = mantenciones.filter(filtroRegistroMant);
+            const tiposVisitaExtra = ['extraordinaria', 'emergencia', 'reparacion'];
+            const visitasDesdeMantenciones = (Array.isArray(mantenciones) ? mantenciones : []).filter((m) =>
+                tiposVisitaExtra.includes(m.tipoVisita)
             );
-            const ultimasMantenciones = obtenerUltimasMantencionesPorProveedor(mantencionesFiltradas);
-            
-            ultimasMantenciones.forEach(m => {
-                // Las mantenciones sin plazo no tienen fecha próxima ni estado de vencimiento
-                if (m.tipoVisita === 'sin-plazo' || !m.plazo) {
-                    mantencionesAlDia.push({ 
-                        ...m, 
-                        fechaProxima: null, 
-                        estado: { estado: 'sin-plazo', dias: null, clase: 'maintenance-ok' } 
-                    });
-                } else {
-                    const fechaProxima = calcularProximaMantencion(m.fechaUltima, m.plazo);
-                    const estado = obtenerEstadoMantencion(fechaProxima);
-                    
-                    // Agrupar por estado
-                    if (estado.estado === 'vencida') {
-                        mantencionesVencidas.push({ ...m, fechaProxima, estado, diasVencidos: estado.dias });
-                        totalDiasVencidas += estado.dias;
-                        if (!mantencionMasVencida || estado.dias > mantencionMasVencida.diasVencidos) {
-                            mantencionMasVencida = { ...m, fechaProxima, estado, diasVencidos: estado.dias };
-                        }
-                    } else if (estado.estado === 'proxima') {
-                        mantencionesProximas.push({ ...m, fechaProxima, estado });
-                        if (!mantencionMasProxima || estado.dias < mantencionMasProxima.estado.dias) {
-                            mantencionMasProxima = { ...m, fechaProxima, estado };
-                        }
-                    } else {
-                        mantencionesAlDia.push({ ...m, fechaProxima, estado });
-                    }
-                }
-                
-                // Agrupar por proveedor
-                mantencionesPorProveedor[m.proveedor] = (mantencionesPorProveedor[m.proveedor] || 0) + 1;
-                
-                // Agrupar por servicio
-                mantencionesPorServicio[m.servicio] = (mantencionesPorServicio[m.servicio] || 0) + 1;
+            const visitasBase = Array.isArray(visitasExtraordinarias) ? [...visitasExtraordinarias] : [];
+            const idsVisitas = new Set(visitasBase.map((v) => v.id).filter(Boolean));
+            visitasDesdeMantenciones.forEach((v) => {
+                if (v.id && idsVisitas.has(v.id)) return;
+                if (v.id) idsVisitas.add(v.id);
+                visitasBase.push(v);
             });
+            const visitasArr = visitasBase;
 
             let html = `
                 <div class="reporte-header">
@@ -20386,431 +20357,223 @@
                                 <p style="margin: 0.05rem 0; font-size: 0.65rem; color: #6b7280; line-height: 1.2;"><strong>Jefe:</strong> ${jefeEdificio}</p>
                             </div>
                             <div style="flex: 1; min-width: 160px;">
-                                <p style="margin: 0.05rem 0; font-size: 0.65rem; color: #6b7280; line-height: 1.2;"><strong>Período:</strong> ${nombreMes}</p>
-                                <p style="margin: 0.05rem 0; font-size: 0.65rem; color: #6b7280; line-height: 1.2;"><strong>Deptos:</strong> ${numeroDeptos} | <strong>Generado:</strong> ${fechaHoy}</p>
+                                <p style="margin: 0.05rem 0; font-size: 0.65rem; color: #6b7280; line-height: 1.2;"><strong>Período:</strong> ${esc(nombreMes)}</p>
+                                <p style="margin: 0.05rem 0; font-size: 0.65rem; color: #6b7280; line-height: 1.2;"><strong>Deptos:</strong> ${numeroDeptos} | <strong>Generado:</strong> ${esc(fechaHoy)}</p>
                             </div>
                         </div>
                     </div>
                     <h1>REPORTE DE MANTENCIONES</h1>
                 </div>
 
-                <div class="reporte-section" style="margin-top: 0.2rem;">
-                    <h2>DETALLE DE MANTENCIONES</h2>
             `;
-            
-            if (mantenciones.length > 0) {
-                // Filtrar mantenciones normales y sin plazo
-                const mantencionesFiltradas = mantenciones.filter(m => 
-                    !m.tipoVisita || m.tipoVisita === 'normal' || m.tipoVisita === 'sin-plazo'
-                );
-                
-                // Agrupar mantenciones por proveedor y mes
-                const mantencionesConEstado = mantencionesFiltradas.map(m => {
-                    // Las mantenciones sin plazo no tienen fecha próxima ni estado de vencimiento
+
+            html += `<div class="reporte-section" style="margin-top: 0.35rem;"><h2>REGISTROS DE MANTENCIONES</h2>`;
+            html += `<div style="overflow-x:auto;"><table class="reporte-table"><thead><tr>
+                <th>N°</th><th>Proveedor</th><th>Servicio</th><th>Última</th><th>Próxima</th><th>Plazo</th><th>Estado</th><th>Observaciones</th>
+            </tr></thead><tbody>`;
+            if (registrosMant.length === 0) {
+                html += `<tr><td colspan="8" style="font-size:0.7rem;color:var(--gray-500);font-style:italic;padding:0.5rem;">Sin registros normales o sin plazo en este período.</td></tr>`;
+            } else {
+                const conEstado = registrosMant.map((m) => {
                     if (m.tipoVisita === 'sin-plazo' || !m.plazo) {
-                        return { 
-                            ...m, 
-                            fechaProxima: null, 
-                            estado: { estado: 'sin-plazo', dias: null, clase: 'maintenance-ok' } 
-                        };
+                        return { ...m, fechaProxima: null, estado: { estado: 'sin-plazo', dias: null } };
                     }
                     const fechaProxima = calcularProximaMantencion(m.fechaUltima, m.plazo);
-                    const estado = obtenerEstadoMantencion(fechaProxima);
-                    return { ...m, fechaProxima, estado };
+                    return { ...m, fechaProxima, estado: obtenerEstadoMantencion(fechaProxima) };
                 });
-                
-                const mantencionesAgrupadas = agruparMantencionesPorProveedorYMes(mantencionesConEstado);
-                
-                // Ordenar mantenciones agrupadas: vencidas primero, luego próximas, luego al día, luego sin plazo
-                mantencionesAgrupadas.sort((a, b) => {
-                    // Vencidas primero
-                    if (a.estado.estado === 'vencida' && b.estado.estado !== 'vencida') return -1;
-                    if (a.estado.estado !== 'vencida' && b.estado.estado === 'vencida') return 1;
-                    // Luego próximas
-                    if (a.estado.estado === 'proxima' && b.estado.estado === 'ok') return -1;
-                    if (a.estado.estado === 'ok' && b.estado.estado === 'proxima') return 1;
-                    // Sin plazo al final
-                    if (a.estado.estado === 'sin-plazo' && b.estado.estado !== 'sin-plazo') return 1;
-                    if (a.estado.estado !== 'sin-plazo' && b.estado.estado === 'sin-plazo') return -1;
-                    // Ordenar por días (si tienen)
-                    if (a.estado.dias !== null && b.estado.dias !== null) {
-                        return a.estado.dias - b.estado.dias;
-                    }
+                const grupos = agruparMantencionesPorProveedorYMes(conEstado);
+                const ordenEstado = (e) => {
+                    if (e === 'vencida') return 0;
+                    if (e === 'proxima') return 1;
+                    if (e === 'ok') return 2;
+                    return 3;
+                };
+                grupos.sort((a, b) => {
+                    const ra = ordenEstado(a.estado.estado);
+                    const rb = ordenEstado(b.estado.estado);
+                    if (ra !== rb) return ra - rb;
+                    const da = a.estado.dias;
+                    const db = b.estado.dias;
+                    if (da != null && db != null) return da - db;
                     return 0;
                 });
-                
-                html += `
-                    <div style="overflow-x: auto; -webkit-overflow-scrolling: touch;">
-                        <table class="reporte-table">
-                            <thead>
-                                <tr>
-                                    <th>N°</th>
-                                    <th>Proveedor</th>
-                                    <th>Servicio</th>
-                                    <th>Última Mantención</th>
-                                    <th>Próxima Mantención</th>
-                                    <th>Observaciones</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                `;
-                
-                mantencionesAgrupadas.forEach((grupo, idx) => {
-                    // Formatear fechas: si hay múltiples, mostrarlas todas ordenadas
-                    let fechasTexto = '';
-                    if (grupo.necesitaUnificacion && grupo.fechas.length > 1) {
-                        fechasTexto = grupo.fechas.map(f => formatearFecha(f)).join(', ');
-                    } else {
-                        fechasTexto = formatearFecha(grupo.fechaUltima);
+                grupos.forEach((grupo, idx) => {
+                    let estadoTexto = 'Sin plazo';
+                    let estadoColor = '#6b7280';
+                    if (grupo.tipoVisita !== 'sin-plazo' && grupo.plazo) {
+                        if (grupo.estado.estado === 'vencida') {
+                            estadoTexto = `Vencida (${grupo.estado.dias} días)`;
+                            estadoColor = '#dc2626';
+                        } else if (grupo.estado.estado === 'proxima') {
+                            estadoTexto = `Próxima (${grupo.estado.dias} días)`;
+                            estadoColor = '#d97706';
+                        } else {
+                            estadoTexto = `OK (${grupo.estado.dias} días)`;
+                            estadoColor = '#15803d';
+                        }
                     }
-                    
-                    // Observaciones unificadas - limitar longitud para PDF
-                    let observacionesTexto = grupo.observaciones.length > 0 
-                        ? grupo.observaciones.join(' | ') 
-                        : '-';
-                    // Truncar observaciones muy largas para mejor visualización en PDF
-                    if (observacionesTexto.length > 150) {
-                        observacionesTexto = observacionesTexto.substring(0, 147) + '...';
-                    }
-                    
-                    // Mostrar fecha próxima solo si tiene plazo
-                    const fechaProximaTexto = (grupo.tipoVisita === 'sin-plazo' || !grupo.plazo || !grupo.fechaProxima) 
-                        ? 'Sin plazo' 
+                    const fechasTexto = grupo.necesitaUnificacion && grupo.fechas.length > 1
+                        ? grupo.fechas.map((f) => formatearFecha(f)).join(', ')
+                        : formatearFecha(grupo.fechaUltima);
+                    let obs = grupo.observaciones.length ? grupo.observaciones.join(' | ') : '—';
+                    if (obs.length > 180) obs = obs.slice(0, 177) + '...';
+                    const fechaProxTxt = (grupo.tipoVisita === 'sin-plazo' || !grupo.plazo || !grupo.fechaProxima)
+                        ? '—'
                         : formatearFecha(formatearFechaISO(grupo.fechaProxima));
-                    
-                    // Truncar proveedor y servicio si son muy largos para mejor ajuste
-                    const proveedorTexto = grupo.proveedor.length > 20 ? grupo.proveedor.substring(0, 17) + '...' : grupo.proveedor;
-                    const servicioTexto = grupo.servicio.length > 20 ? grupo.servicio.substring(0, 17) + '...' : grupo.servicio;
-                    
-                    html += `
-                        <tr>
-                            <td style="text-align: center; font-size: 0.65rem;">${idx + 1}</td>
-                            <td style="font-size: 0.65rem;">${proveedorTexto}</td>
-                            <td style="font-size: 0.65rem;">${servicioTexto}</td>
-                            <td style="font-size: 0.65rem;">${fechasTexto}</td>
-                            <td style="font-size: 0.65rem;">${fechaProximaTexto}</td>
-                            <td style="font-size: 0.65rem; line-height: 1.2;">${observacionesTexto}</td>
-                        </tr>
-                    `;
+                    const plazoTxt = grupo.plazo ? obtenerTextoPeriodo(grupo.plazo) : 'Sin plazo';
+                    html += `<tr>
+                        <td style="text-align:center;font-size:0.65rem;">${idx + 1}</td>
+                        <td style="font-size:0.65rem;">${esc(trunc(grupo.proveedor, 28))}</td>
+                        <td style="font-size:0.65rem;">${esc(trunc(grupo.servicio, 28))}</td>
+                        <td style="font-size:0.65rem;">${esc(fechasTexto)}</td>
+                        <td style="font-size:0.65rem;">${esc(fechaProxTxt)}</td>
+                        <td style="font-size:0.65rem;">${esc(plazoTxt)}</td>
+                        <td style="font-size:0.65rem;color:${estadoColor};font-weight:600;">${esc(estadoTexto)}</td>
+                        <td style="font-size:0.65rem;line-height:1.2;">${esc(obs)}</td>
+                    </tr>`;
                 });
-                
-                html += `
-                        </tbody>
-                    </table>
-                `;
+            }
+            html += `</tbody></table></div></div>`;
+
+            html += `<div class="reporte-section" style="margin-top: 0.45rem;"><h2>VISITAS EXTRAORDINARIAS, EMERGENCIAS Y REPARACIONES</h2>`;
+            html += `<div style="overflow-x:auto;"><table class="reporte-table"><thead><tr>
+                <th>N°</th><th>Proveedor</th><th>Servicio</th><th>Tipo</th><th>Fecha</th><th>Respaldo</th><th>Observaciones</th>
+            </tr></thead><tbody>`;
+            if (visitasArr.length === 0) {
+                html += `<tr><td colspan="7" style="font-size:0.7rem;color:var(--gray-500);font-style:italic;padding:0.5rem;">Sin registros en este período.</td></tr>`;
             } else {
-                html += `<p style="color: var(--gray-500); font-style: italic;">No se registraron mantenciones durante este período.</p>`;
-            }
-            
-            html += `</div>`;
-
-            // Sección de visitas extraordinarias
-            if (visitasExtraordinarias && visitasExtraordinarias.length > 0) {
-                // Ordenar visitas extraordinarias por fecha (más reciente primero)
-                const visitasOrdenadas = [...visitasExtraordinarias].sort((a, b) => {
-                    const fechaA = new Date(a.fechaUltima);
-                    const fechaB = new Date(b.fechaUltima);
-                    return fechaB - fechaA;
-                });
-
-                // Agrupar por tipo de visita
-                const visitasPorTipo = {
-                    'extraordinaria': visitasOrdenadas.filter(v => v.tipoVisita === 'extraordinaria'),
-                    'emergencia': visitasOrdenadas.filter(v => v.tipoVisita === 'emergencia'),
-                    'reparacion': visitasOrdenadas.filter(v => v.tipoVisita === 'reparacion')
-                };
-
-                const tiposTexto = {
-                    'extraordinaria': 'Visitas Extraordinarias',
-                    'emergencia': 'Emergencias',
-                    'reparacion': 'Reparaciones'
-                };
-
-                html += `
-                    <div class="reporte-section" style="margin-top: 0.5rem;">
-                        <h2>VISITAS EXTRAORDINARIAS</h2>
-                `;
-
-                // Mostrar cada tipo de visita
-                Object.keys(visitasPorTipo).forEach(tipo => {
-                    const visitas = visitasPorTipo[tipo];
-                    if (visitas.length > 0) {
-                        html += `
-                            <div style="margin-bottom: 0.5rem; page-break-inside: avoid; page-break-before: auto;">
-                                <h3 style="margin: 0 0 0.35rem 0; color: #1f2937; font-size: 0.9rem; font-weight: 600; page-break-after: avoid;">
-                                    ${tiposTexto[tipo]} (${visitas.length})
-                                </h3>
-                                <div style="overflow-x: auto; -webkit-overflow-scrolling: touch;">
-                                    <table class="reporte-table">
-                                        <thead>
-                                            <tr>
-                                                <th>N°</th>
-                                                <th>Proveedor</th>
-                                                <th>Servicio</th>
-                                                <th>Fecha</th>
-                                                <th>Respaldo</th>
-                                                <th>Observaciones</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                        `;
-
-                        visitas.forEach((visita, idx) => {
-                            let observacionesTexto = visita.observaciones && visita.observaciones.trim() 
-                                ? visita.observaciones 
-                                : '-';
-                            // Truncar observaciones muy largas
-                            if (observacionesTexto.length > 150) {
-                                observacionesTexto = observacionesTexto.substring(0, 147) + '...';
-                            }
-                            
-                            // Formatear el campo de respaldo (link)
-                            let respaldoTexto = '-';
-                            if (visita.link && visita.link.trim()) {
-                                // Si es una URL, mostrarla como enlace
-                                const linkUrl = visita.link.trim();
-                                respaldoTexto = `<a href="${linkUrl}" target="_blank" style="color: rgba(117, 187, 33, 0.9); text-decoration: none; font-weight: 500; font-size: 0.7rem; word-break: break-all;">🔗 Ver</a>`;
-                            }
-                            
-                            // Truncar proveedor y servicio si son muy largos
-                            const proveedorTexto = (visita.proveedor || '-').length > 20 ? (visita.proveedor || '-').substring(0, 17) + '...' : (visita.proveedor || '-');
-                            const servicioTexto = (visita.servicio || '-').length > 20 ? (visita.servicio || '-').substring(0, 17) + '...' : (visita.servicio || '-');
-                            
-                            html += `
-                                <tr>
-                                    <td style="text-align: center; font-size: 0.65rem;">${idx + 1}</td>
-                                    <td style="font-size: 0.65rem;">${proveedorTexto}</td>
-                                    <td style="font-size: 0.65rem;">${servicioTexto}</td>
-                                    <td style="font-size: 0.65rem;">${formatearFecha(visita.fechaUltima)}</td>
-                                    <td style="font-size: 0.65rem;">${respaldoTexto}</td>
-                                    <td style="font-size: 0.65rem; line-height: 1.2;">${observacionesTexto}</td>
-                                </tr>
-                            `;
-                        });
-
-                        html += `
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        `;
+                const ordenadas = [...visitasArr].sort((a, b) => new Date(b.fechaUltima) - new Date(a.fechaUltima));
+                ordenadas.forEach((v, idx) => {
+                    let obs = (v.observaciones && v.observaciones.trim()) ? v.observaciones.trim() : '—';
+                    if (obs.length > 180) obs = obs.slice(0, 177) + '...';
+                    let resp = '—';
+                    if (v.link && v.link.trim()) {
+                        const url = v.link.trim();
+                        resp = `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="color: rgba(117, 187, 33, 0.9); font-size: 0.7rem;">🔗 Ver</a>`;
                     }
+                    html += `<tr>
+                        <td style="text-align:center;font-size:0.65rem;">${idx + 1}</td>
+                        <td style="font-size:0.65rem;">${esc(trunc(v.proveedor || '—', 26))}</td>
+                        <td style="font-size:0.65rem;">${esc(trunc(v.servicio || '—', 26))}</td>
+                        <td style="font-size:0.65rem;">${labelTipoVisita(v.tipoVisita)}</td>
+                        <td style="font-size:0.65rem;">${esc(formatearFecha(v.fechaUltima))}</td>
+                        <td style="font-size:0.65rem;">${resp}</td>
+                        <td style="font-size:0.65rem;line-height:1.2;">${esc(obs)}</td>
+                    </tr>`;
                 });
-
-                html += `</div>`;
             }
+            html += `</tbody></table></div></div>`;
 
-            // Sección de carpeta de mantenciones (link mensual) - Justo después de la tabla
             const mesActual = obtenerMesActual();
             const esMesActual = usarMesActual || (mesAnio === mesActual);
-            // esMesReabierto ya está declarado al inicio de la función
-            const keyConfig = 'mantenciones-config';
             let carpetaConfig = null;
-
-            // Intentar obtener la configuración con múltiples métodos
-            // Primero verificar si es mes reabierto o actual
             if (esMesReabierto || esMesActual) {
                 const mesAUsar = esMesReabierto ? mesAnio : mesActual;
-                
-                // Método 1: Verificar directamente en Firestore (datos activos)
                 if (firebaseInitialized && db) {
-                    const docKey = `${keyConfig}_${mesAUsar}`;
                     try {
-                        const docRef = db.collection('comunidad').doc(docKey);
+                        const docRef = db.collection('comunidad').doc(`mantenciones-config_${mesAUsar}`);
                         const doc = await docRef.get();
                         if (doc.exists) {
-                            const data = doc.data();
-                            const resultado = data.datos || [];
-                            if (Array.isArray(resultado) && resultado.length > 0) {
-                                carpetaConfig = resultado[0];
-                            }
+                            const resultado = doc.data().datos || [];
+                            if (Array.isArray(resultado) && resultado.length > 0) carpetaConfig = resultado[0];
                         }
                     } catch (e) {
-                        console.error('Error al leer configuración de Firestore:', e);
+                        console.error('Error al leer mantenciones-config (Firestore):', e);
                     }
                 }
-                
-                // Método 2: Verificar directamente en LocalStorage
                 if (!carpetaConfig) {
-                    const docKey = `${keyConfig}_${mesAUsar}`;
-                    const datosLS = localStorage.getItem(docKey);
+                    const datosLS = localStorage.getItem(`mantenciones-config_${mesAUsar}`);
                     if (datosLS && datosLS !== '[]' && datosLS !== 'null') {
                         try {
                             const parsed = JSON.parse(datosLS);
-                            if (Array.isArray(parsed) && parsed.length > 0) {
-                                carpetaConfig = parsed[0];
-                            }
+                            if (Array.isArray(parsed) && parsed.length > 0) carpetaConfig = parsed[0];
                         } catch (e) {
-                            console.error('Error al parsear configuración de LocalStorage:', e);
+                            console.error('Error al parsear mantenciones-config (LS):', e);
                         }
                     }
                 }
-                
-                // Método 3: obtenerDatosMes (usa window.mesEnConsulta)
                 if (!carpetaConfig) {
-                    const configActiva = await obtenerDatosMes(keyConfig);
-                    if (Array.isArray(configActiva) && configActiva.length > 0) {
-                        carpetaConfig = configActiva[0];
-                    }
+                    const configActiva = await obtenerDatosMes('mantenciones-config');
+                    if (Array.isArray(configActiva) && configActiva.length > 0) carpetaConfig = configActiva[0];
                 }
-                
-                // Método 4: obtenerDatosMesEspecifico con el mes específico
                 if (!carpetaConfig) {
-                    const configMantenciones = await obtenerDatosMesEspecifico(keyConfig, mesAUsar);
-                    if (Array.isArray(configMantenciones) && configMantenciones.length > 0) {
-                        carpetaConfig = configMantenciones[0];
-                    }
+                    const c = await obtenerDatosMesEspecifico('mantenciones-config', mesAUsar);
+                    if (Array.isArray(c) && c.length > 0) carpetaConfig = c[0];
                 }
             } else {
-                // Mes archivado: intentar leer configuración archivada
-                const configArchivada = await obtenerDatosArchivados(keyConfig, mesAnio);
-                carpetaConfig = Array.isArray(configArchivada) && configArchivada.length > 0 ? configArchivada[0] : null;
+                const arch = await obtenerDatosArchivados('mantenciones-config', mesAnio);
+                carpetaConfig = Array.isArray(arch) && arch.length > 0 ? arch[0] : null;
             }
 
-            html += `
-                <div class="reporte-section" style="margin-top: 0.4rem;">
-                    <h2>CARPETA DE MANTENCIONES</h2>
-            `;
-
-            if (carpetaConfig && carpetaConfig.link && carpetaConfig.link.trim()) {
-                html += `
-                    <div style="background: #f8fafc; border: 1px solid rgba(117, 187, 33, 0.3); border-radius: 6px; padding: 0.6rem; margin-top: 0.5rem;">
-                        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; flex-wrap: wrap;">
-                            <div style="width: 32px; height: 32px; background: rgba(117, 187, 33, 0.2); border: 1px solid rgba(117, 187, 33, 0.4); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 1rem;">
-                                📁
-                            </div>
-                            <div style="flex: 1;">
-                                <h3 style="margin: 0 0 0.1rem 0; color: #1f2937; font-size: 0.9rem; font-weight: 600;">
-                                    Carpeta de Guías y Respaldo
-                                </h3>
-                                <p style="margin: 0; color: #6b7280; font-size: 0.75rem;">
-                                    Accede a la carpeta con todas las guías y respaldos de mantenciones del período
-                                </p>
-                            </div>
-                        </div>
-                        <div style="margin-top: 0.4rem;">
-                            <a href="${carpetaConfig.link}" target="_blank" style="display: inline-flex; align-items: center; gap: 0.3rem; background: rgba(117, 187, 33, 0.9); color: white; padding: 0.4rem 0.9rem; border-radius: 5px; text-decoration: none; font-weight: 600; font-size: 0.75rem; transition: background 0.2s;">
-                                <span>🔗</span>
-                                <span>Abrir Carpeta de Mantenciones</span>
-                            </a>
-                        </div>
-                    </div>
-                `;
+            html += `<div class="reporte-section" style="margin-top: 0.4rem;"><h2>CARPETA DE MANTENCIONES</h2>`;
+            if (carpetaConfig && carpetaConfig.link && String(carpetaConfig.link).trim()) {
+                const link = String(carpetaConfig.link).trim();
+                html += `<div style="background:#f8fafc;border:1px solid rgba(117,187,33,0.3);border-radius:6px;padding:0.6rem;margin-top:0.4rem;">
+                    <p style="margin:0 0 0.4rem 0;font-size:0.75rem;color:#6b7280;">Carpeta de guías y respaldos del período.</p>
+                    <a href="${esc(link)}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:0.3rem;background:rgba(117,187,33,0.9);color:white;padding:0.4rem 0.9rem;border-radius:5px;text-decoration:none;font-weight:600;font-size:0.75rem;">🔗 Abrir carpeta</a>
+                </div>`;
             } else {
-                html += `
-                    <div style="background: #f8fafc; border: 1px solid #e5e7eb; border-radius: 6px; padding: 0.6rem; margin-top: 0.5rem;">
-                        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-                            <div style="width: 32px; height: 32px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 1rem;">
-                                ⚠️
-                            </div>
-                            <div style="flex: 1;">
-                                <h3 style="margin: 0 0 0.1rem 0; color: #1f2937; font-size: 0.9rem; font-weight: 600;">
-                                    Carpeta no disponible
-                                </h3>
-                                <p style="margin: 0; color: #6b7280; font-size: 0.75rem;">
-                                    No se registró link de carpeta de mantenciones para este período.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                `;
+                html += `<p style="color:#6b7280;font-style:italic;font-size:0.7rem;">No hay link de carpeta registrado para este período.</p>`;
             }
-
             html += `</div>`;
 
-            // Análisis de observaciones por proveedor
-            const observacionesPorProveedor = {};
-            mantenciones.forEach(m => {
-                if (m.observaciones && m.observaciones.trim()) {
-                    if (!observacionesPorProveedor[m.proveedor]) {
-                        observacionesPorProveedor[m.proveedor] = [];
-                    }
-                    observacionesPorProveedor[m.proveedor].push({
+            const obsPorProv = {};
+            mantenciones.forEach((m) => {
+                if (m.observaciones && String(m.observaciones).trim()) {
+                    const k = m.proveedor || '—';
+                    if (!obsPorProv[k]) obsPorProv[k] = [];
+                    obsPorProv[k].push({
                         servicio: m.servicio,
-                        observaciones: m.observaciones.trim(),
+                        observaciones: String(m.observaciones).trim(),
                         fecha: m.fechaUltima
                     });
                 }
             });
-
-            if (Object.keys(observacionesPorProveedor).length > 0) {
-                html += `
-                    <div class="reporte-section" style="margin-top: 0.4rem;">
-                        <h2>ANÁLISIS DE OBSERVACIONES POR PROVEEDOR</h2>
-                `;
-
-                Object.keys(observacionesPorProveedor).forEach(proveedor => {
-                    const observaciones = observacionesPorProveedor[proveedor];
-
-                    // Análisis simple \"tipo IA\" de las observaciones
-                    const totalObs = observaciones.length;
-                    const serviciosUnicos = [...new Set(observaciones.map(o => o.servicio))];
-                    const textoCompleto = observaciones.map(o => o.observaciones.toLowerCase()).join(' ');
-
+            const provsObs = Object.keys(obsPorProv);
+            html += `<div class="reporte-section" style="margin-top: 0.4rem;"><h2>ANÁLISIS DE OBSERVACIONES POR PROVEEDOR</h2>`;
+            if (provsObs.length === 0) {
+                html += `<p style="color: var(--gray-500); font-style: italic; font-size: 0.7rem;">No se registraron observaciones.</p>`;
+            } else {
+                provsObs.forEach((proveedor) => {
+                    const observaciones = obsPorProv[proveedor];
+                    const textoCompleto = observaciones.map((o) => o.observaciones.toLowerCase()).join(' ');
                     let nivelRiesgo = 'bajo';
                     let resumenRiesgo = 'principalmente comentarios menores y de seguimiento rutinario.';
-                    if (textoCompleto.includes('fuga') || textoCompleto.includes('incendio') || textoCompleto.includes('riesgo') || textoCompleto.includes('emergencia')) {
+                    if (/fuga|incendio|riesgo|emergencia/i.test(textoCompleto)) {
                         nivelRiesgo = 'alto';
                         resumenRiesgo = 'se detectan incidentes críticos (fugas, emergencias o riesgos relevantes) que requieren seguimiento cercano.';
-                    } else if (textoCompleto.includes('ruido') || textoCompleto.includes('reclamo') || textoCompleto.includes('demora') || textoCompleto.includes('retraso')) {
+                    } else if (/ruido|reclamo|demora|retraso/i.test(textoCompleto)) {
                         nivelRiesgo = 'medio';
                         resumenRiesgo = 'se observan molestias recurrentes o problemas de calidad de servicio que conviene monitorear.';
                     }
-
-                    html += `
-                        <div style="background: #f8fafc; padding: 0.6rem; border-radius: 6px; margin-bottom: 0.6rem; border: 1px solid #e5e7eb;">
-                            <h3 style="margin: 0 0 0.25rem 0; color: #1f2937; font-size: 0.9rem;">${proveedor}</h3>
-                            <p style="margin: 0 0 0.3rem 0; color: #6b7280; font-size: 0.75rem;">
-                                <strong>Total de observaciones:</strong> ${totalObs} · 
-                                <strong>Servicios involucrados:</strong> ${serviciosUnicos.join(', ')}
-                            </p>
-                            <p style="margin: 0 0 0.4rem 0; color: #4b5563; font-size: 0.75rem;">
-                                <strong>Nivel de atención sugerido:</strong> 
-                                <span style="color: ${nivelRiesgo === 'alto' ? '#b91c1c' : nivelRiesgo === 'medio' ? '#b45309' : '#15803d'}; text-transform: uppercase;">
-                                    ${nivelRiesgo}
-                                </span>
-                                · Según las observaciones, ${resumenRiesgo}
-                            </p>
-                            <div style="margin-top: 0.4rem;">
-                    `;
-
-                    observaciones.forEach((obs, idx) => {
-                        html += `
-                            <div style="background: var(--bg-primary); padding: 0.5rem; border-radius: 5px; margin-bottom: 0.3rem; border: 1px solid var(--border-color); transition: background-color 0.3s ease, border-color 0.3s ease;">
-                                <p style="margin: 0 0 0.15rem 0; font-size: 0.75rem; color: var(--text-primary); transition: color 0.3s ease;">
-                                    <strong>${obs.servicio}</strong> - ${formatearFecha(obs.fecha)}
-                                </p>
-                                <p style="margin: 0; font-size: 0.75rem; color: #6b7280; line-height: 1.3;">
-                                    ${obs.observaciones}
-                                </p>
-                            </div>
-                        `;
+                    const colNivel = nivelRiesgo === 'alto' ? '#b91c1c' : nivelRiesgo === 'medio' ? '#b45309' : '#15803d';
+                    html += `<div style="background:#f8fafc;padding:0.6rem;border-radius:6px;margin-bottom:0.5rem;border:1px solid #e5e7eb;">
+                        <h3 style="margin:0 0 0.2rem 0;font-size:0.9rem;">${esc(proveedor)}</h3>
+                        <p style="margin:0 0 0.3rem 0;font-size:0.72rem;color:#6b7280;">
+                            <strong>Observaciones:</strong> ${observaciones.length} ·
+                            <strong>Servicios:</strong> ${esc([...new Set(observaciones.map((o) => o.servicio))].join(', '))}
+                        </p>
+                        <p style="margin:0 0 0.35rem 0;font-size:0.72rem;color:#4b5563;">
+                            <strong>Atención sugerida:</strong> <span style="color:${colNivel};text-transform:uppercase;">${nivelRiesgo}</span>
+                            · ${resumenRiesgo}
+                        </p>`;
+                    observaciones.forEach((o) => {
+                        html += `<div style="background:var(--bg-primary, #fff);padding:0.45rem;border-radius:4px;margin-bottom:0.25rem;border:1px solid var(--border-color, #e5e7eb);">
+                            <p style="margin:0 0 0.1rem 0;font-size:0.72rem;"><strong>${esc(o.servicio || '—')}</strong> — ${esc(formatearFecha(o.fecha))}</p>
+                            <p style="margin:0;font-size:0.72rem;color:#6b7280;">${esc(o.observaciones)}</p>
+                        </div>`;
                     });
-
-                    html += `
-                            </div>
-                        </div>
-                    `;
+                    html += `</div>`;
                 });
-
-                html += `</div>`;
-            } else {
-                html += `
-                    <div class="reporte-section" style="margin-top: 0.4rem;">
-                        <h2>ANÁLISIS DE OBSERVACIONES POR PROVEEDOR</h2>
-                        <p style="color: var(--gray-500); font-style: italic; font-size: 0.7rem; margin: 0.25rem 0;">No se registraron observaciones durante este período.</p>
-                    </div>
-                `;
             }
+            html += `</div>`;
 
-            html += `
-                <div class="reporte-footer">
-                    <p>Reporte generado automáticamente por el Sistema de Gestión de Comunidad</p>
-                </div>
-            `;
+            html += `<div class="reporte-footer"><p>Reporte generado automáticamente por el Sistema de Gestión de Comunidad</p></div>`;
 
             descargarReporteHTML(html, `Reporte_Mantenciones_${nombreMes.replace(/\s+/g, '_')}`, 'Reporte de Mantenciones');
         }
+
+        window.generarReporteMantencionesPDF = generarReporteMantencionesPDF;
 
         // Función para descargar reporte de Caja Chica del mes actual (disponible globalmente)
         window.descargarReporteCajaActual = async function() {
@@ -25179,7 +24942,7 @@
                         const mesActual = obtenerMesActual();
                         const nombreMes = obtenerNombreMes(mesActual);
                         if (typeof window.generarReporteMantencionesPDF === 'function') {
-                            await window.generarReporteMantencionesPDF(mesActual, nombreMes);
+                            await window.generarReporteMantencionesPDF(mesActual, nombreMes, true);
                         } else {
                             mostrarAlerta('Función de descarga de reporte de mantenciones no disponible.', 'Error');
                         }

@@ -17248,7 +17248,7 @@
                         html += 'var nombreMesReporte = "' + nombreMes.replace(/"/g, '&quot;') + '";';
                         html += 'var personalizacionReporte = {';
                         html += 'comunidad: "' + (nombreComunidad || 'Activa WM815').replace(/"/g, '&quot;').replace(/'/g, '&#39;') + '",';
-                        html += 'jefeEdificio: "' + (jefeEdificio || 'Administración').replace(/"/g, '&quot;').replace(/'/g, '&#39;') + '"';
+                        html += 'jefeEdificio: "' + (jefeEdificio || 'Angel Avendaño').replace(/"/g, '&quot;').replace(/'/g, '&#39;') + '"';
                         html += '};';
                         html += 'function generarComprobanteSalidaReporte(id) {';
                         html += 'try {';
@@ -26391,20 +26391,27 @@
                             background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
                             padding: 25px 40px;
                             border-bottom: 2px solid #e5e7eb;
+                            text-align: left !important;
+                            direction: ltr;
                         }
                         .info-grid { 
                             display: table; 
                             width: 100%; 
                             border-collapse: separate;
                             border-spacing: 0;
+                            text-align: left !important;
+                            margin-left: 0;
+                            margin-right: auto;
                         }
                         .info-row { 
-                            display: table-row; 
+                            display: table-row;
+                            text-align: left !important;
                         }
                         .info-cell { 
                             display: table-cell; 
                             padding: 12px 20px;
                             vertical-align: middle;
+                            text-align: left !important;
                         }
                         .info-label { 
                             font-weight: 700; 
@@ -26413,11 +26420,14 @@
                             text-transform: uppercase;
                             letter-spacing: 0.5px;
                             min-width: 140px;
+                            width: 150px;
+                            text-align: left !important;
                         }
                         .info-value { 
                             color: #111827; 
                             font-size: 14px;
                             font-weight: 600;
+                            text-align: left !important;
                         }
                         .table-container {
                             padding: 30px 40px;
@@ -26514,19 +26524,19 @@
                             <div class="header-title" style="color: #111827 !important;">NÓMINA MENSUAL</div>
                             <div class="header-subtitle" style="color: #111827 !important;">${comunidad}</div>
                         </div>
-                        <div class="info-section">
-                            <div class="info-grid">
+                        <div class="info-section" style="text-align: left !important; width: 100%;">
+                            <div class="info-grid" align="left" style="text-align: left !important; width: 100%;">
                                 <div class="info-row">
-                                    <div class="info-cell info-label">Período:</div>
-                                    <div class="info-cell info-value">${formatearFecha(desde)} - ${formatearFecha(hasta)}</div>
-                                    <div class="info-cell info-label">Fecha de Emisión:</div>
-                                    <div class="info-cell info-value">${formatearFecha(fechaEmision)}</div>
+                                    <div class="info-cell info-label" style="text-align: left !important;">Período:</div>
+                                    <div class="info-cell info-value" style="text-align: left !important;">${formatearFecha(desde)} - ${formatearFecha(hasta)}</div>
+                                    <div class="info-cell info-label" style="text-align: left !important;">Fecha de Emisión:</div>
+                                    <div class="info-cell info-value" style="text-align: left !important;">${formatearFecha(fechaEmision)}</div>
                                 </div>
                                 <div class="info-row">
-                                    <div class="info-cell info-label">Responsable:</div>
-                                    <div class="info-cell info-value">${responsable}</div>
-                                    <div class="info-cell"></div>
-                                    <div class="info-cell"></div>
+                                    <div class="info-cell info-label" style="text-align: left !important;">Responsable:</div>
+                                    <div class="info-cell info-value" style="text-align: left !important;">${responsable}</div>
+                                    <div class="info-cell" style="text-align: left !important;">&nbsp;</div>
+                                    <div class="info-cell" style="text-align: left !important;">&nbsp;</div>
                                 </div>
                             </div>
                         </div>

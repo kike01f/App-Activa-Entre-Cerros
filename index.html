@@ -1387,6 +1387,24 @@
             height: 8px;
             border-radius: 50%;
         }
+        /* Novedad módulo Gestión de Tareas (mostaza; oculta automáticamente tras la fecha tope) */
+        .dashboard2-card-new-badge {
+            position: absolute;
+            top: 0.35rem;
+            left: 0.45rem;
+            z-index: 2;
+            font-size: 0.5rem;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #2b2305;
+            background: linear-gradient(180deg, #e8d05a 0%, #c9a227 45%, #a8861a 100%);
+            border: 1px solid rgba(60, 48, 8, 0.35);
+            border-radius: 4px;
+            padding: 0.1rem 0.32rem;
+            line-height: 1.2;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+        }
         .dashboard2-card-icon-wrap {
             width: 2rem;
             height: 2rem;
@@ -6145,13 +6163,14 @@
                             <li><strong>Alertas:</strong> avisos en el módulo para tareas vencidas y próximas a vencer; semáforo en la tarjeta del panel según carga de trabajo.</li>
                             <li><strong>Resumen:</strong> totales de tareas, pendientes/en proceso, completadas y vencidas.</li>
                             <li><strong>Comentarios y notas:</strong> comentarios con fecha en cada tarea; campo de notas adjuntas en texto; historial básico de cambios.</li>
-                            <li><strong>Guardado:</strong> los datos se almacenan en el navegador (localStorage de este equipo); no se sincronizan con Firebase.</li>
+                            <li><strong>Guardado:</strong> las tareas se guardan en <strong>Firestore</strong>, en la colección de la comunidad, bajo el documento <code style="background:var(--bg-tertiary);padding:0.1rem 0.35rem;border-radius:4px;font-size:0.85em;">gestion_tareas</code> y la subcolección <code style="background:var(--bg-tertiary);padding:0.1rem 0.35rem;border-radius:4px;font-size:0.85em;">items</code>, para que el equipo vea la misma información al iniciar sesión. Si Firebase no está disponible, el módulo usa almacenamiento local como respaldo.</li>
                         </ul>
                         <p style="margin-bottom: 0.5rem;"><strong>Consejos:</strong></p>
                         <ul style="margin-left: 1.5rem; margin-bottom: 0;">
                             <li>Use responsables claros (por ejemplo, “Conserje turno noche”, “Administración”) para filtrar después.</li>
                             <li>Al eliminar una tarea, la acción es definitiva; el sistema pide confirmación.</li>
-                            <li>Si no ve tareas, el módulo puede cargar datos de ejemplo la primera vez; puede borrar la clave <code style="background:var(--bg-tertiary);padding:0.1rem 0.35rem;border-radius:4px;font-size:0.85em;">gestion_comunidad_tareas_v1</code> en almacenamiento local solo si desea reiniciar (herramientas de desarrollo del navegador).</li>
+                            <li>La primera vez que no existan tareas en la nube, el módulo puede crear datos de ejemplo o importar tareas antiguas guardadas solo en el navegador (clave legacy <code style="background:var(--bg-tertiary);padding:0.1rem 0.35rem;border-radius:4px;font-size:0.85em;">gestion_comunidad_tareas_v1</code>) y subirlas a Firestore.</li>
+                            <li>En la consola de Firebase, las reglas de seguridad deben permitir lectura y escritura autenticada sobre <code style="background:var(--bg-tertiary);padding:0.1rem 0.35rem;border-radius:4px;font-size:0.85em;">comunidad/gestion_tareas/items</code> (o el equivalente según su proyecto).</li>
                         </ul>
                     </div>
                 </div>
@@ -7005,12 +7024,16 @@
                 } catch (e) {}
                 auth = firebase.auth();
                 firebaseInitialized = true;
+                window.getGestionFirestoreDb = function () { return firebaseInitialized ? db : null; };
+                window.GESTION_FIRESTORE_COLLECTION = FIRESTORE_COLLECTION_COMUNIDAD;
             } else {
                 console.warn('Firebase SDK no disponible, usando LocalStorage como respaldo');
             }
         } catch (error) {
             console.error('Error al inicializar Firebase:', error);
             console.warn('Usando LocalStorage como respaldo');
+            window.getGestionFirestoreDb = function () { return null; };
+            window.GESTION_FIRESTORE_COLLECTION = typeof FIRESTORE_COLLECTION_COMUNIDAD !== 'undefined' ? FIRESTORE_COLLECTION_COMUNIDAD : 'comunidad';
         }
 
         // ============================================
@@ -22950,25 +22973,33 @@
             }
             }
 
-            (function agregarTarjetaGestionTareasPanel() {
+            {
                 let totalT = 0, pendActivas = 0, vencidas = 0;
-                try {
-                    const raw = localStorage.getItem('gestion_comunidad_tareas_v1');
-                    if (raw) {
-                        const arr = JSON.parse(raw);
-                        if (Array.isArray(arr)) {
-                            totalT = arr.length;
-                            const hoyFin = new Date();
-                            arr.forEach(function (t) {
-                                if (!t) return;
-                                if (t.estado === 'pendiente' || t.estado === 'en_proceso') pendActivas++;
-                                if (t.fechaVencimiento && t.estado !== 'completada') {
-                                    const d = new Date(t.fechaVencimiento);
-                                    d.setHours(23, 59, 59, 999);
-                                    if (d < hoyFin) vencidas++;
-                                }
-                            });
+                const hoyFin = new Date();
+                const contarDesdeArr = function (arr) {
+                    if (!Array.isArray(arr)) return;
+                    totalT = arr.length;
+                    arr.forEach(function (t) {
+                        if (!t) return;
+                        if (t.estado === 'pendiente' || t.estado === 'en_proceso') pendActivas++;
+                        if (t.fechaVencimiento && t.estado !== 'completada') {
+                            const d = new Date(t.fechaVencimiento);
+                            d.setHours(23, 59, 59, 999);
+                            if (d < hoyFin) vencidas++;
                         }
+                    });
+                };
+                try {
+                    const gdb = typeof window.getGestionFirestoreDb === 'function' ? window.getGestionFirestoreDb() : null;
+                    const gcol = window.GESTION_FIRESTORE_COLLECTION;
+                    if (gdb && gcol) {
+                        const snap = await gdb.collection(gcol).doc('gestion_tareas').collection('items').get();
+                        const arr = [];
+                        snap.forEach(function (d) { var o = d.data() || {}; o.id = d.id; arr.push(o); });
+                        contarDesdeArr(arr);
+                    } else {
+                        const raw = localStorage.getItem('gestion_comunidad_tareas_v1');
+                        if (raw) contarDesdeArr(JSON.parse(raw));
                     }
                 } catch (e) { /* ignorar */ }
                 stats.push({
@@ -22985,7 +23016,7 @@
                     semaforo: vencidas > 0 ? 'rojo' : (pendActivas > 5 ? 'amarillo' : 'verde'),
                     onClickTab: 'gestionTareas'
                 });
-            })();
+            }
 
             stats.forEach(function (st) {
                 if (!st.onClickTab) {
@@ -23076,8 +23107,12 @@
                 const _click = _tab
                     ? ` style="cursor:pointer" role="button" tabindex="0" onclick="if(typeof window.showTab==='function')window.showTab('${_tab}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();if(typeof window.showTab==='function')window.showTab('${_tab}');}" title="Ir al módulo"`
                     : '';
+                const _finNewTareas = new Date(2026, 3, 10, 23, 59, 59, 999);
+                const _newBadgeHTML = (stat.title === 'Gestión de Tareas' && new Date() <= _finNewTareas)
+                    ? '<span class="dashboard2-card-new-badge" aria-label="Novedad">New</span>'
+                    : '';
                 // Mismo diseño que gestion-wm: tarjetas oscuras dashboard2-card
-                return `<div class="dashboard2-card ${stat.iconClass || ''}"${_click}>${semaforoHTML}<div class="dashboard2-card-icon-wrap">${iconoSVG}</div><div class="dashboard2-card-title">${stat.title || ''}</div><div class="dashboard2-card-value dashboard-card-value" ${dataAttrs}>${valorFinalMostrar}</div>${subHTML}</div>`;
+                return `<div class="dashboard2-card ${stat.iconClass || ''}"${_click}>${_newBadgeHTML}${semaforoHTML}<div class="dashboard2-card-icon-wrap">${iconoSVG}</div><div class="dashboard2-card-title">${stat.title || ''}</div><div class="dashboard2-card-value dashboard-card-value" ${dataAttrs}>${valorFinalMostrar}</div>${subHTML}</div>`;
             }).join('');
             
             // Mostrar u ocultar secciones del panel según módulos visibles (IDs igual que gestion-wm)
@@ -23252,7 +23287,11 @@
                     }
                     var tabId = (stat.onClickTab && String(stat.onClickTab).replace(/\\/g, '').replace(/'/g, '')) || '';
                     var tabClick = tabId ? ' style="cursor:pointer" role="button" tabindex="0" onclick="if(typeof window.showTab===\'function\')window.showTab(\'' + tabId + '\')" onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();if(typeof window.showTab===\'function\')window.showTab(\'' + tabId + '\');}" title="Ir al módulo"' : '';
-                    return '<div class="dashboard2-card ' + (stat.iconClass || '') + '"' + tabClick + '>' + semaforoHTML + '<div class="dashboard2-card-icon-wrap">' + iconoSVG + '</div><div class="dashboard2-card-title">' + (stat.title || '') + '</div><div class="dashboard2-card-value dashboard-card-value" data-value="' + valorNumerico + '" data-es-moneda="' + esMoneda + '"' + textoFinalAttr + '>' + valorFinalMostrar + '</div>' + subHTML + '</div>';
+                    var finNewTareas = new Date(2026, 3, 10, 23, 59, 59, 999);
+                    var newBadgeHTML = (stat.title === 'Gestión de Tareas' && new Date() <= finNewTareas)
+                        ? '<span class="dashboard2-card-new-badge" aria-label="Novedad">New</span>'
+                        : '';
+                    return '<div class="dashboard2-card ' + (stat.iconClass || '') + '"' + tabClick + '>' + newBadgeHTML + semaforoHTML + '<div class="dashboard2-card-icon-wrap">' + iconoSVG + '</div><div class="dashboard2-card-title">' + (stat.title || '') + '</div><div class="dashboard2-card-value dashboard-card-value" data-value="' + valorNumerico + '" data-es-moneda="' + esMoneda + '"' + textoFinalAttr + '>' + valorFinalMostrar + '</div>' + subHTML + '</div>';
                 }).join('');
                 setTimeout(function() {
                     var cards = statsDiv.querySelectorAll('.dashboard2-card');
@@ -23560,7 +23599,7 @@
                 if (new Date() > finAviso) return;
                 recordatorios.push({
                     tipo: 'info',
-                    mensaje: '📋 Nuevo módulo Gestión de Tareas (menú lateral): organice limpieza, mantenciones, reclamos y turnos. Vista tablero Kanban (Pendiente / En proceso / Completada) y vista lista; cree y edite tareas con título, descripción, fechas de inicio y vencimiento, prioridad, estado, responsable y categoría (Aseo, Mantención, Seguridad, Administración, Otros). Filtros por estado, prioridad, categoría y responsable, buscador de texto, arrastre de tarjetas entre columnas, comentarios, notas adjuntas en texto, historial de cambios, alertas de tareas próximas a vencer y vencidas, panel resumen con totales y datos guardados en localStorage del navegador. Consulte el Manual de usuario, sección Gestión de Tareas. Este mensaje deja de mostrarse después del 10 de abril de 2026.',
+                    mensaje: '📋 Nuevo módulo Gestión de Tareas (menú lateral): organice limpieza, mantenciones, reclamos y turnos. Vista tablero Kanban (Pendiente / En proceso / Completada) y vista lista; cree y edite tareas con título, descripción, fechas de inicio y vencimiento, prioridad, estado, responsable y categoría (Aseo, Mantención, Seguridad, Administración, Otros). Filtros por estado, prioridad, categoría y responsable, buscador de texto, arrastre de tarjetas entre columnas, comentarios, notas adjuntas en texto, historial de cambios, alertas de tareas próximas a vencer y vencidas, panel resumen con totales y sincronización de datos en Firestore (misma base que el resto de la aplicación). Consulte el Manual de usuario, sección Gestión de Tareas. Este mensaje deja de mostrarse después del 10 de abril de 2026.',
                     icono: '📋'
                 });
             })();
@@ -29402,12 +29441,86 @@
     <script id="modulo-tareas-inline-js">
 /**
  * Módulo Gestión de Tareas — vanilla JS
- * Persistencia: localStorage (clave STORAGE_KEY)
+ * Persistencia: Firestore (comunidad/gestion_tareas/items/{id}); respaldo local si no hay Firebase.
  */
 (function (global) {
     'use strict';
 
-    var STORAGE_KEY = 'gestion_comunidad_tareas_v1';
+    var LEGACY_STORAGE_KEY = 'gestion_comunidad_tareas_v1';
+
+    function getFsContext() {
+        if (typeof global.getGestionFirestoreDb !== 'function') return null;
+        var dbf = global.getGestionFirestoreDb();
+        var rootCol = global.GESTION_FIRESTORE_COLLECTION;
+        if (!dbf || !rootCol) return null;
+        return {
+            db: dbf,
+            itemsRef: function () {
+                return dbf.collection(rootCol).doc('gestion_tareas').collection('items');
+            }
+        };
+    }
+
+    function taskPayloadForFirestore(task) {
+        try {
+            return JSON.parse(JSON.stringify(task));
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function loadTasksLegacy() {
+        try {
+            var raw = localStorage.getItem(LEGACY_STORAGE_KEY);
+            if (raw) {
+                var arr = JSON.parse(raw);
+                if (Array.isArray(arr)) return arr;
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    function saveTasksLegacy() {
+        try {
+            localStorage.setItem(LEGACY_STORAGE_KEY, JSON.stringify(state.tasks));
+        } catch (e) {
+            console.error('No se pudieron guardar las tareas (local)', e);
+        }
+    }
+
+    function persistTaskDoc(task) {
+        var ctx = getFsContext();
+        if (!ctx) {
+            saveTasksLegacy();
+            return Promise.resolve();
+        }
+        return ctx.itemsRef().doc(task.id).set(taskPayloadForFirestore(task)).catch(function (err) {
+            console.error('Firestore guardar tarea:', err);
+            throw err;
+        });
+    }
+
+    function deleteTaskDoc(id) {
+        var ctx = getFsContext();
+        if (!ctx) {
+            saveTasksLegacy();
+            return Promise.resolve();
+        }
+        return ctx.itemsRef().doc(id).delete().catch(function (err) {
+            console.error('Firestore eliminar tarea:', err);
+            throw err;
+        });
+    }
+
+    function uploadBatchTasks(ctx, arr) {
+        if (!ctx || !arr.length) return Promise.resolve();
+        var batch = ctx.db.batch();
+        var ref = ctx.itemsRef();
+        arr.forEach(function (t) {
+            batch.set(ref.doc(t.id), taskPayloadForFirestore(t));
+        });
+        return batch.commit();
+    }
 
     var ESTADOS = {
         pendiente: { label: 'Pendiente', key: 'pendiente' },
@@ -29489,25 +29602,6 @@
         var limit = new Date();
         limit.setDate(limit.getDate() + (days || 2));
         return due <= limit;
-    }
-
-    function loadTasks() {
-        try {
-            var raw = localStorage.getItem(STORAGE_KEY);
-            if (raw) {
-                var arr = JSON.parse(raw);
-                if (Array.isArray(arr)) return arr;
-            }
-        } catch (e) {}
-        return null;
-    }
-
-    function saveTasks() {
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
-        } catch (e) {
-            console.error('No se pudieron guardar las tareas', e);
-        }
     }
 
     function addHistorial(task, accion) {
@@ -29626,13 +29720,58 @@
     }
 
     function ensureTasks() {
-        var loaded = loadTasks();
-        if (loaded && loaded.length) {
-            state.tasks = loaded;
-        } else {
-            state.tasks = seedSample();
-            saveTasks();
-        }
+        return new Promise(function (resolve) {
+            var ctx = getFsContext();
+            if (!ctx) {
+                var L = loadTasksLegacy();
+                if (L && L.length) state.tasks = L;
+                else {
+                    state.tasks = seedSample();
+                    saveTasksLegacy();
+                }
+                resolve();
+                return;
+            }
+            ctx.itemsRef().get().then(function (snap) {
+                var arr = [];
+                snap.forEach(function (d) {
+                    var o = d.data() || {};
+                    o.id = d.id;
+                    arr.push(o);
+                });
+                if (arr.length) {
+                    state.tasks = arr;
+                    resolve();
+                    return;
+                }
+                var mig = loadTasksLegacy();
+                if (mig && mig.length) {
+                    state.tasks = mig;
+                    uploadBatchTasks(ctx, mig).then(function () {
+                        try {
+                            localStorage.removeItem(LEGACY_STORAGE_KEY);
+                        } catch (e) {}
+                        resolve();
+                    }).catch(function () {
+                        resolve();
+                    });
+                    return;
+                }
+                state.tasks = seedSample();
+                uploadBatchTasks(ctx, state.tasks).then(function () {
+                    resolve();
+                }).catch(function () {
+                    saveTasksLegacy();
+                    resolve();
+                });
+            }).catch(function (err) {
+                console.error('Carga tareas Firestore:', err);
+                var L = loadTasksLegacy();
+                state.tasks = L && L.length ? L : seedSample();
+                if (!L || !L.length) saveTasksLegacy();
+                resolve();
+            });
+        });
     }
 
     function getFiltered() {
@@ -29759,6 +29898,7 @@
 
         var nuevoCom = (rootEl.querySelector('#gtNuevoCom').value || '').trim();
         var task;
+        var newTaskPushed = false;
 
         if (state.editingId) {
             task = state.tasks.find(function (x) { return x.id === state.editingId; });
@@ -29790,25 +29930,42 @@
                 addHistorial(task, 'Comentario inicial');
             }
             state.tasks.push(task);
+            newTaskPushed = true;
         }
 
-        saveTasks();
-        closeModal();
-        toast(wasEdit ? 'Tarea actualizada' : 'Tarea creada');
-        render();
+        persistTaskDoc(task).then(function () {
+            closeModal();
+            toast(wasEdit ? 'Tarea actualizada' : 'Tarea creada');
+            render();
+        }).catch(function () {
+            if (newTaskPushed) state.tasks = state.tasks.filter(function (x) { return x.id !== task.id; });
+            else ensureTasks().then(function () { render(); });
+            toast('No se pudo guardar. Revise conexión o permisos en Firestore.');
+        });
     }
 
     function deleteTask(id) {
         confirmDelete().then(function (ok) {
             if (!ok) return;
+            var prev = state.tasks.slice();
             state.tasks = state.tasks.filter(function (t) { return t.id !== id; });
-            saveTasks();
-            toast('Tarea eliminada');
             render();
+            if (!getFsContext()) {
+                saveTasksLegacy();
+                toast('Tarea eliminada');
+                return;
+            }
+            deleteTaskDoc(id).then(function () {
+                toast('Tarea eliminada');
+            }).catch(function () {
+                state.tasks = prev;
+                render();
+                toast('No se pudo eliminar en Firestore');
+            });
         });
     }
 
-    function setEstado(id, nuevo) {
+    function setEstado(id, nuevo, onPersistOk) {
         var t = state.tasks.find(function (x) { return x.id === id; });
         if (!t || t.estado === nuevo) return;
         var ant = t.estado;
@@ -29817,13 +29974,21 @@
         var la = (ESTADOS[ant] && ESTADOS[ant].label) || ant;
         var ln = (ESTADOS[nuevo] && ESTADOS[nuevo].label) || nuevo;
         addHistorial(t, 'Estado: ' + la + ' → ' + ln);
-        saveTasks();
         render();
+        persistTaskDoc(t).then(function () {
+            if (onPersistOk) onPersistOk();
+        }).catch(function () {
+            ensureTasks().then(function () {
+                render();
+                toast('No se pudo actualizar el estado en Firestore');
+            });
+        });
     }
 
     function markComplete(id) {
-        setEstado(id, 'completada');
-        toast('Marcada como completada');
+        setEstado(id, 'completada', function () {
+            toast('Marcada como completada');
+        });
     }
 
     function renderAlerts() {
@@ -30080,21 +30245,23 @@
         if (!rootEl || rootEl.getAttribute('data-gt-inited') === '1') return;
         rootEl.setAttribute('data-gt-inited', '1');
         rootEl.classList.add('modulo-tareas');
-        ensureTasks();
         buildShell();
         wireEvents();
-        render();
+        ensureTasks().then(function () {
+            render();
+        });
     }
 
     function refresh() {
         if (!rootEl || rootEl.getAttribute('data-gt-inited') !== '1') init();
         else {
-            ensureTasks();
-            render();
+            ensureTasks().then(function () {
+                render();
+            });
         }
     }
 
-    global.ModuloTareas = { init: init, refresh: refresh, STORAGE_KEY: STORAGE_KEY };
+    global.ModuloTareas = { init: init, refresh: refresh, LEGACY_STORAGE_KEY: LEGACY_STORAGE_KEY };
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);

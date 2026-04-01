@@ -19520,6 +19520,41 @@
             sheet.getCell('A2').value = ctx.nombreComunidad;
             sheet.getCell('A2').font = { bold: true, size: _EXCEL_TAM_TEXTO_CELDA };
             sheet.getCell('A2').alignment = { horizontal: 'center', vertical: 'middle' };
+
+            const info = [
+                ['Proyecto', ctx.nombreComunidad || 'Comunidad'],
+                ['Periodo', ctx.nombreMes || '-'],
+                ['Jefe de Edificio', ctx.jefeEdificio || 'No especificado'],
+                ['Deptos', ctx.numeroDeptos || 'No especificado'],
+                ['Generado', formatearFecha(obtenerFechaHoy())]
+            ];
+            let row = 4;
+            info.forEach(([label, value]) => {
+                sheet.getCell(row, 1).value = `${label}:`;
+                sheet.getCell(row, 1).font = { bold: true, size: _EXCEL_TAM_TEXTO_CELDA };
+                sheet.getCell(row, 2).value = value;
+                sheet.getCell(row, 2).font = { size: _EXCEL_TAM_TEXTO_CELDA };
+                row += 1;
+            });
+
+            row += 1;
+            sheet.mergeCells(row, 1, row, 5);
+            sheet.getCell(row, 1).value = 'RESUMEN GENERAL';
+            sheet.getCell(row, 1).font = { bold: true, size: _EXCEL_TAM_TITULO_TABLA };
+            row += 1;
+
+            (ctx.resumenLineas || []).forEach((linea) => {
+                sheet.mergeCells(row, 1, row, 5);
+                sheet.getCell(row, 1).value = linea;
+                sheet.getCell(row, 1).font = { size: _EXCEL_TAM_TEXTO_CELDA };
+                row += 1;
+            });
+
+            sheet.getColumn(1).width = 24;
+            sheet.getColumn(2).width = 42;
+            sheet.getColumn(3).width = 14;
+            sheet.getColumn(4).width = 14;
+            sheet.getColumn(5).width = 14;
         }
 
         async function exportarInformeMensualXLSX(opciones = {}) {
@@ -19548,7 +19583,19 @@
             wb.created = new Date();
 
             const portada = wb.addWorksheet('Portada');
-            _rellenarPortadaXLSX(portada, { nombreComunidad, jefeEdificio, numeroDeptos, nombreMes });
+            _rellenarPortadaXLSX(portada, {
+                nombreComunidad,
+                jefeEdificio,
+                numeroDeptos,
+                nombreMes,
+                resumenLineas: [
+                    `Mudanzas: ${(mudanzas || []).length} registros`,
+                    `Tarjetas/TAG: ${(tarjetas || []).length} registros`,
+                    `Multas: ${(multas || []).length} registros`,
+                    `Morosos: ${(morosos || []).length} registros`,
+                    `Aperturas: ${(aperturas || []).length} registros`
+                ]
+            });
 
             const hojas = [
                 { key: 'mudanzas', nombre: 'Mudanzas', datos: generarDatosMudanzas(mudanzas || []) },

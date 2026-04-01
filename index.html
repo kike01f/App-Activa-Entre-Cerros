@@ -6320,7 +6320,11 @@
         // ============================================
         // CONFIGURACIÓN DE FIRESTORE
         // ============================================
-        // Proyecto Activa Entre Cerros (datos y notificaciones de esta comunidad)
+        // --- Firebase: solo Entre Cerros ---
+        // Proyecto: activa-entre-cerros (no usar credenciales de gestion-wm).
+        // gestion-wm.html usa proyecto distinto: administracion-41391 → bases de datos ya separadas a nivel de proyecto.
+        // Colección raíz de documentos en ESTE proyecto (cambie a p. ej. "comunidad_entre_cerros" solo si migra datos en consola):
+        const FIRESTORE_COLLECTION_COMUNIDAD = 'comunidad';
         const firebaseConfig = {
             apiKey: "AIzaSyCbHnFHAxrmEyb9IL0m62NAod9kGKqWG3k",
             authDomain: "activa-entre-cerros.firebaseapp.com",
@@ -6559,7 +6563,7 @@
                 arr = JSON.parse(localStorage.getItem(key) || '[]');
             } catch (e) { return; }
             if (arr.length === 0 || !firebaseInitialized || !db) return;
-            const col = db.collection('comunidad').doc('notificaciones').collection('movimientos');
+            const col = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('notificaciones').collection('movimientos');
             for (let i = arr.length - 1; i >= 0; i--) {
                 const x = arr[i];
                 try {
@@ -6585,7 +6589,7 @@
             let guardadoEnNube = false;
             if (firebaseInitialized && db) {
                 try {
-                    const col = db.collection('comunidad').doc('notificaciones').collection('movimientos');
+                    const col = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('notificaciones').collection('movimientos');
                     await col.add(item);
                     guardadoEnNube = true;
                     await actualizarBadgeNotif();
@@ -6612,7 +6616,7 @@
             let ultimaVista = null;
             if (firebaseInitialized && db) {
                 try {
-                    const doc = await db.collection('comunidad').doc('notificaciones').get();
+                    const doc = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('notificaciones').get();
                     if (doc.exists && doc.data().ultimaVista && doc.data().ultimaVista.toDate) {
                         ultimaVista = doc.data().ultimaVista.toDate();
                     }
@@ -6634,7 +6638,7 @@
             let count = 0;
             if (firebaseInitialized && db) {
                 try {
-                    const snap = await db.collection('comunidad').doc('notificaciones').collection('movimientos').orderBy('fecha', 'desc').limit(NOTIF_LIMIT).get();
+                    const snap = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('notificaciones').collection('movimientos').orderBy('fecha', 'desc').limit(NOTIF_LIMIT).get();
                     snap.docs.forEach(d => {
                         const fecha = d.data().fecha && d.data().fecha.toDate ? d.data().fecha.toDate() : null;
                         if (fecha && (!ultimaVista || fecha > ultimaVista)) count++;
@@ -6668,7 +6672,7 @@
             const ahora = new Date();
             if (firebaseInitialized && db) {
                 try {
-                    await db.collection('comunidad').doc('notificaciones').set({ ultimaVista: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+                    await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('notificaciones').set({ ultimaVista: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
                 } catch (e) {}
             }
             try {
@@ -6697,7 +6701,7 @@
             if (firebaseInitialized && db) {
                 try {
                     await migrarNotificacionesLocalANube();
-                    var snap = await db.collection('comunidad').doc('notificaciones').collection('movimientos').orderBy('fecha', 'desc').limit(NOTIF_LIMIT).get();
+                    var snap = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('notificaciones').collection('movimientos').orderBy('fecha', 'desc').limit(NOTIF_LIMIT).get();
                     items = snap.docs.map(function(d) {
                         var data = d.data();
                         return { id: d.id, tipo: data.tipo, modulo: data.modulo, detalle: data.detalle, fecha: parsearFechaNotif(data.fecha) };
@@ -6757,7 +6761,7 @@
                 }
             } else if (firebaseInitialized && db) {
                 try {
-                    await db.collection('comunidad').doc('notificaciones').collection('movimientos').doc(id).delete();
+                    await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('notificaciones').collection('movimientos').doc(id).delete();
                 } catch (e) { console.warn('Error al borrar notificación:', e); }
             }
             await actualizarBadgeNotif();
@@ -6770,7 +6774,7 @@
             if (!confirmado) return;
             if (firebaseInitialized && db) {
                 try {
-                    const snap = await db.collection('comunidad').doc('notificaciones').collection('movimientos').limit(NOTIF_LIMIT).get();
+                    const snap = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('notificaciones').collection('movimientos').limit(NOTIF_LIMIT).get();
                     const batch = db.batch();
                     snap.docs.forEach(d => batch.delete(d.ref));
                     await batch.commit();
@@ -6782,7 +6786,7 @@
             } catch (e) {}
             if (firebaseInitialized && db) {
                 try {
-                    await db.collection('comunidad').doc('notificaciones').set({ ultimaVista: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+                    await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('notificaciones').set({ ultimaVista: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
                 } catch (e) {}
             }
             await actualizarBadgeNotif();
@@ -7229,7 +7233,7 @@
             // Intentar obtener de Firestore
             if (firebaseInitialized && db) {
                 try {
-                    const docRef = db.collection('comunidad').doc(key);
+                    const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(key);
                     const doc = await docRef.get();
                     if (doc.exists) {
                         const data = doc.data() || {};
@@ -7271,7 +7275,7 @@
             // Guardar en Firestore
             if (firebaseInitialized && db) {
                 try {
-                    await db.collection('comunidad').doc(key).set({
+                    await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(key).set({
                         datos: datos,
                         modulo: key,
                         actualizado: firebase.firestore.FieldValue.serverTimestamp()
@@ -7298,7 +7302,7 @@
             // Intentar obtener de Firestore
             if (firebaseInitialized && db) {
                 try {
-                    const docRef = db.collection('comunidad').doc(key);
+                    const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(key);
                     const doc = await docRef.get();
                     if (doc.exists) {
                         const data = doc.data();
@@ -7340,7 +7344,7 @@
             // Guardar en Firestore
             if (firebaseInitialized && db) {
                 try {
-                    await db.collection('comunidad').doc(key).set({
+                    await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(key).set({
                         comunidad: datos.comunidad,
                         jefeEdificio: datos.jefeEdificio,
                         deptos: datos.deptos,
@@ -7591,7 +7595,7 @@
         async function obtenerOcupacionSoloDocumentoGlobal() {
             if (firebaseInitialized && db) {
                 try {
-                    const doc = await db.collection('comunidad').doc(OCUPACION_DOC_ID).get();
+                    const doc = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(OCUPACION_DOC_ID).get();
                     if (doc.exists) {
                         const data = doc.data();
                         const r = Array.isArray(data.datos) ? data.datos : [];
@@ -7648,7 +7652,7 @@
             if (key === 'ocupacion-residentes') {
                 if (firebaseInitialized && db) {
                     try {
-                        const docRef = db.collection('comunidad').doc(OCUPACION_DOC_ID);
+                        const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(OCUPACION_DOC_ID);
                         const doc = await docRef.get();
                         if (doc.exists) {
                             const data = doc.data();
@@ -7674,7 +7678,7 @@
                 for (const lk of clavesLegacy) {
                     if (firebaseInitialized && db) {
                         try {
-                            const docRef = db.collection('comunidad').doc(lk);
+                            const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(lk);
                             const doc = await docRef.get();
                             if (doc.exists) {
                                 const data = doc.data();
@@ -7705,7 +7709,7 @@
             // Intentar obtener datos activos (reabiertos) desde Firestore
             if (firebaseInitialized && db && mesConsulta !== mesActual) {
                 try {
-                    const docRef = db.collection('comunidad').doc(docKey);
+                    const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(docKey);
                     const doc = await docRef.get();
                     if (doc.exists) {
                         const data = doc.data();
@@ -7727,7 +7731,7 @@
             // Intentar obtener de Firestore
             if (firebaseInitialized && db) {
                 try {
-                    const docRef = db.collection('comunidad').doc(docKey);
+                    const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(docKey);
                     const doc = await docRef.get();
                     if (doc.exists) {
                         const data = doc.data();
@@ -7781,7 +7785,7 @@
                 // Intentar obtener de Firestore
                 if (firebaseInitialized && db) {
                     try {
-                        const docRef = db.collection('comunidad').doc(docKey);
+                        const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(docKey);
                         const doc = await docRef.get();
                         if (doc.exists) {
                             const data = doc.data();
@@ -7834,7 +7838,7 @@
             // Intentar obtener de Firestore
             if (firebaseInitialized && db) {
                 try {
-                    const docRef = db.collection('comunidad').doc(archivoKey);
+                    const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(archivoKey);
                     const doc = await docRef.get();
                     if (doc.exists) {
                         const data = doc.data();
@@ -7898,7 +7902,7 @@
                         payload.mes = mesAGuardar;
                         payload.reabierto = window.mesReabierto || false;
                     }
-                    await db.collection('comunidad').doc(docKey).set(payload);
+                    await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(docKey).set(payload);
                     console.log(`Datos guardados en Firestore: ${docKey}`);
                 } catch (error) {
                     console.error('Error al guardar en Firestore:', error);
@@ -7929,7 +7933,7 @@
             // Intentar guardar en Firestore
             if (firebaseInitialized && db) {
                 try {
-                    await db.collection('comunidad').doc(estadoKey).set({
+                    await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(estadoKey).set({
                         ...estado,
                         actualizado: firebase.firestore.FieldValue.serverTimestamp()
                     });
@@ -7950,7 +7954,7 @@
             // Intentar obtener de Firestore
             if (firebaseInitialized && db) {
                 try {
-                    const docRef = db.collection('comunidad').doc(estadoKey);
+                    const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(estadoKey);
                     const doc = await docRef.get();
                     if (doc.exists) {
                         const data = doc.data();
@@ -7983,7 +7987,7 @@
             // Obtener último mes procesado desde Firestore o LocalStorage
             if (firebaseInitialized && db) {
                 try {
-                    const doc = await db.collection('comunidad').doc('config').get();
+                    const doc = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('config').get();
                     if (doc.exists) {
                         ultimoMes = doc.data().ultimoMesProcesado;
                     }
@@ -8009,13 +8013,13 @@
                         let datos = null;
                         if (firebaseInitialized && db) {
                             try {
-                                const doc = await db.collection('comunidad').doc(docKey).get();
+                                const doc = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(docKey).get();
                                 if (doc.exists) {
                                     const data = doc.data();
                                     datos = Array.isArray(data.datos) ? data.datos : [];
                                     // Guardar como archivo en Firestore
                                     if (datos.length > 0) {
-                                        await db.collection('comunidad').doc(archivoKey).set({
+                                        await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(archivoKey).set({
                                             datos: datos,
                                             mes: ultimoMes,
                                             modulo: modulo,
@@ -8023,7 +8027,7 @@
                                             archivadoEn: firebase.firestore.FieldValue.serverTimestamp()
                                         });
                                         // Eliminar documento actual
-                                        await db.collection('comunidad').doc(docKey).delete();
+                                        await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(docKey).delete();
                                     }
                                 }
                             } catch (error) {
@@ -8044,7 +8048,7 @@
                 // Guardar mes actual procesado
                 if (firebaseInitialized && db) {
                     try {
-                        await db.collection('comunidad').doc('config').set({
+                        await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('config').set({
                             ultimoMesProcesado: mesActual,
                             actualizado: firebase.firestore.FieldValue.serverTimestamp()
                         }, { merge: true });
@@ -9911,7 +9915,7 @@
             // Primero intentar cargar desde Firestore
             if (firebaseInitialized && db) {
                 try {
-                    const doc = await db.collection('comunidad').doc(key).get();
+                    const doc = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(key).get();
                     if (doc.exists && doc.data().listas === true) {
                         // Sincronizar con localStorage para acceso rápido
                         localStorage.setItem(key, 'true');
@@ -9950,7 +9954,7 @@
                 // Guardar primero en Firestore si está disponible
                 if (firebaseInitialized && db) {
                     try {
-                        await db.collection('comunidad').doc(key).set({
+                        await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(key).set({
                             listas: true,
                             mes: mesDestino,
                             marcadoEn: firebase.firestore.FieldValue.serverTimestamp()
@@ -9975,7 +9979,7 @@
                     localStorage.setItem(key, 'true');
                     if (firebaseInitialized && db) {
                         try {
-                            await db.collection('comunidad').doc(key).set({
+                            await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(key).set({
                                 listas: true,
                                 mes: mesDestino,
                                 marcadoEn: firebase.firestore.FieldValue.serverTimestamp()
@@ -10010,7 +10014,7 @@
                 // Eliminar primero de Firestore si está disponible
                 if (firebaseInitialized && db) {
                     try {
-                        await db.collection('comunidad').doc(key).delete();
+                        await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(key).delete();
                         console.log('✅ Estado eliminado de Firestore');
                     } catch (error) {
                         console.error('Error al eliminar estado de Firestore:', error);
@@ -10032,7 +10036,7 @@
                     localStorage.removeItem(key);
                     if (firebaseInitialized && db) {
                         try {
-                            await db.collection('comunidad').doc(key).delete();
+                            await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(key).delete();
                         } catch (e) {}
                     }
                 }
@@ -10781,7 +10785,7 @@
         async function obtenerInventario() {
             try {
                 if (firebaseInitialized && db) {
-                    const docRef = db.collection('comunidad').doc('inventario-productos');
+                    const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('inventario-productos');
                     const doc = await docRef.get();
                     if (doc.exists) {
                         return doc.data().productos || [];
@@ -10802,7 +10806,7 @@
                 productos.sort((a, b) => a.nombre.localeCompare(b.nombre));
                 
                 if (firebaseInitialized && db) {
-                    await db.collection('comunidad').doc('inventario-productos').set({
+                    await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('inventario-productos').set({
                         productos: productos,
                         actualizado: firebase.firestore.FieldValue.serverTimestamp()
                     });
@@ -11301,7 +11305,7 @@
                     // Buscar en Firestore (datos activos)
                     if (firebaseInitialized && db) {
                         try {
-                            const docRef = db.collection('comunidad').doc(`insumos_${mesAnteriorStr}`);
+                            const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(`insumos_${mesAnteriorStr}`);
                             const doc = await docRef.get();
                             if (doc.exists) {
                                 const data = doc.data();
@@ -15250,7 +15254,7 @@
                 // Intentar obtener de Firestore
                 if (firebaseInitialized && db) {
                     try {
-                        const docRef = db.collection('comunidad').doc('config-modulos');
+                        const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('config-modulos');
                         const doc = await docRef.get();
                         if (doc.exists) {
                             const data = doc.data();
@@ -15356,7 +15360,7 @@
                 // Guardar en Firestore
                 if (firebaseInitialized && db) {
                     try {
-                        await db.collection('comunidad').doc('config-modulos').set({
+                        await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('config-modulos').set({
                             modulosVisibles: modulosVisibles,
                             configuracionExplicita: esConfiguracionExplicita,
                             actualizado: firebase.firestore.FieldValue.serverTimestamp()
@@ -16308,7 +16312,7 @@
             // Buscar meses archivados y reabiertos en Firestore
             if (firebaseInitialized && db) {
                 try {
-                    const snapshot = await db.collection('comunidad').get();
+                    const snapshot = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).get();
                     snapshot.forEach(doc => {
                         const key = doc.id;
                         const data = doc.data();
@@ -16436,7 +16440,7 @@
                     // Eliminar de Firestore
                     if (firebaseInitialized && db) {
                         try {
-                            await db.collection('comunidad').doc(archivoKey).delete();
+                            await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(archivoKey).delete();
                             eliminados++;
                         } catch (error) {
                             console.error(`Error al eliminar ${archivoKey} de Firestore:`, error);
@@ -16514,7 +16518,7 @@
                     try {
                         for (const modulo of modulos) {
                             const activoKey = `${modulo}_${mesSeleccionado}`;
-                            const docRef = db.collection('comunidad').doc(activoKey);
+                            const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(activoKey);
                             const doc = await docRef.get();
                             if (doc.exists) {
                                 const data = doc.data();
@@ -19200,7 +19204,7 @@
                             // Guardar en Firestore
                             if (firebaseInitialized && db) {
                                 try {
-                                    await db.collection('comunidad').doc(archivoKey).set({
+                                    await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(archivoKey).set({
                                         datos: datos,
                                         mes: mesActual,
                                         modulo: modulo,
@@ -19280,7 +19284,7 @@
                 
                 if (firebaseInitialized && db) {
                     try {
-                        await db.collection('comunidad').doc('config').set({
+                        await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('config').set({
                             ultimoMesProcesado: mesActual
                         }, { merge: true });
                         console.log('✅ Configuración actualizada en Firestore');
@@ -19350,14 +19354,14 @@
                     
                     if (firebaseInitialized && db) {
                         try {
-                            const doc = await db.collection('comunidad').doc(archivoKey).get();
+                            const doc = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(archivoKey).get();
                             if (doc.exists) {
                                 const data = doc.data();
                                 datos = Array.isArray(data.datos) ? data.datos : [];
                                 
                                 if (datos.length > 0) {
                                     // Guardar como activo en Firestore
-                                    await db.collection('comunidad').doc(activoKey).set({
+                                    await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(activoKey).set({
                                         datos: datos,
                                         mes: mesAnio,
                                         modulo: modulo,
@@ -19366,7 +19370,7 @@
                                     });
                                     
                                     // Eliminar archivo
-                                    await db.collection('comunidad').doc(archivoKey).delete();
+                                    await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(archivoKey).delete();
                                     datosReabiertos += datos.length;
                                 }
                             }
@@ -19388,7 +19392,7 @@
                                     // Intentar guardar en Firestore también para sincronización
                                     if (firebaseInitialized && db) {
                                         try {
-                                            await db.collection('comunidad').doc(activoKey).set({
+                                            await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(activoKey).set({
                                                 datos: datos,
                                                 mes: mesAnio,
                                                 modulo: modulo,
@@ -19423,14 +19427,14 @@
                     
                     if (firebaseInitialized && db) {
                         try {
-                            const doc = await db.collection('comunidad').doc(archivoKey).get();
+                            const doc = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(archivoKey).get();
                             if (doc.exists) {
                                 const data = doc.data();
                                 datos = Array.isArray(data.datos) ? data.datos : [];
                                 
                                 if (datos.length > 0) {
                                     // Guardar como activo en Firestore
-                                    await db.collection('comunidad').doc(activoKey).set({
+                                    await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(activoKey).set({
                                         datos: datos,
                                         mes: mesAnio,
                                         modulo: moduloConfig,
@@ -19439,7 +19443,7 @@
                                     });
                                     
                                     // Eliminar archivo
-                                    await db.collection('comunidad').doc(archivoKey).delete();
+                                    await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(archivoKey).delete();
                                 }
                             }
                         } catch (error) {
@@ -19460,7 +19464,7 @@
                                     // Intentar guardar en Firestore también para sincronización
                                     if (firebaseInitialized && db) {
                                         try {
-                                            await db.collection('comunidad').doc(activoKey).set({
+                                            await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(activoKey).set({
                                                 datos: datos,
                                                 mes: mesAnio,
                                                 modulo: moduloConfig,
@@ -19488,7 +19492,7 @@
                 if (!ultimoMes || mesAnio > ultimoMes) {
                     if (firebaseInitialized && db) {
                         try {
-                            await db.collection('comunidad').doc('config').set({
+                            await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('config').set({
                                 ultimoMesProcesado: mesAnio,
                                 reabierto: true,
                                 actualizado: firebase.firestore.FieldValue.serverTimestamp()
@@ -19693,7 +19697,7 @@
                 const resumen = [];
                 
                 // Obtener todos los documentos de la colección
-                const snapshot = await db.collection('comunidad').get();
+                const snapshot = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).get();
                 const datosEncontrados = new Map(); // modulo -> array de datos
                 
                 snapshot.forEach(doc => {
@@ -19785,7 +19789,7 @@
                 
                 // También recuperar proveedores si existen
                 try {
-                    const docProveedores = await db.collection('comunidad').doc('proveedores').get();
+                    const docProveedores = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('proveedores').get();
                     if (docProveedores.exists) {
                         const data = docProveedores.data();
                         const proveedores = Array.isArray(data.datos) ? data.datos : [];
@@ -20570,12 +20574,12 @@
                 });
                 if ((!tieneDatosActivos && !tieneConfigActiva) && firebaseInitialized && db) {
                     try {
-                        const docRef = db.collection('comunidad').doc(`mantenciones_${mesAnio}`);
+                        const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(`mantenciones_${mesAnio}`);
                         const doc = await docRef.get();
                         if (doc.exists && doc.data().reabierto === true) {
                             esMesReabierto = true;
                         } else {
-                            const configRef = db.collection('comunidad').doc(`mantenciones-config_${mesAnio}`);
+                            const configRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(`mantenciones-config_${mesAnio}`);
                             const configDoc = await configRef.get();
                             if (configDoc.exists) esMesReabierto = true;
                         }
@@ -20738,7 +20742,7 @@
                 const mesAUsar = esMesReabierto ? mesAnio : mesActual;
                 if (firebaseInitialized && db) {
                     try {
-                        const docRef = db.collection('comunidad').doc(`mantenciones-config_${mesAUsar}`);
+                        const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(`mantenciones-config_${mesAUsar}`);
                         const doc = await docRef.get();
                         if (doc.exists) {
                             const resultado = doc.data().datos || [];
@@ -22488,7 +22492,7 @@
             window._dashboardUnsubscribes = [];
             docIds.forEach(function(docId) {
                 try {
-                    var unsub = db.collection('comunidad').doc(docId).onSnapshot(function() {
+                    var unsub = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(docId).onSnapshot(function() {
                         _refrescarDashboardDebounced();
                     }, function(err) { console.warn('Dashboard onSnapshot error for ' + docId + ':', err); });
                     window._dashboardUnsubscribes.push(unsub);
@@ -23811,7 +23815,7 @@
             // Intentar obtener datos activos desde Firestore
             if (firebaseInitialized && db) {
                 try {
-                    const docRef = db.collection('comunidad').doc(docKey);
+                    const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(docKey);
                     const doc = await docRef.get();
                     if (doc.exists) {
                         const data = doc.data();
@@ -23831,7 +23835,7 @@
             // Intentar obtener de Firestore
             if (firebaseInitialized && db) {
                 try {
-                    const docRef = db.collection('comunidad').doc(docKey);
+                    const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(docKey);
                     const doc = await docRef.get();
                     if (doc.exists) {
                         const data = doc.data();
@@ -23950,7 +23954,7 @@
             // Buscar meses en Firestore
             if (firebaseInitialized && db) {
                 try {
-                    const snapshot = await db.collection('comunidad').get();
+                    const snapshot = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).get();
                     snapshot.forEach(doc => {
                         const key = doc.id;
                         // Buscar meses activos
@@ -28302,7 +28306,7 @@
             // Buscar meses archivados y reabiertos en Firestore
             if (firebaseInitialized && db) {
                 try {
-                    const snapshot = await db.collection('comunidad').get();
+                    const snapshot = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).get();
                     snapshot.forEach(doc => {
                         const key = doc.id;
                         const data = doc.data();
@@ -28538,7 +28542,7 @@
                 // Primero verificar si hay datos activos (reabierto)
                 if (firebaseInitialized && db) {
                     try {
-                        const docRef = db.collection('comunidad').doc(`nomina_${mes}`);
+                        const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(`nomina_${mes}`);
                         const doc = await docRef.get();
                         if (doc.exists) {
                             const data = doc.data();
@@ -28578,7 +28582,7 @@
                 // Cargar reemplazos (mismo proceso)
                 if (firebaseInitialized && db) {
                     try {
-                        const docRef = db.collection('comunidad').doc(`nomina-reemplazos_${mes}`);
+                        const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(`nomina-reemplazos_${mes}`);
                         const doc = await docRef.get();
                         if (doc.exists) {
                             const data = doc.data();

@@ -4834,6 +4834,7 @@
                     </div>
                     <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;">
                         <button type="submit" class="btn btn-primary" id="btnSubmitProveedor">Agregar Proveedor</button>
+                        <button type="button" class="btn btn-secondary" id="btnRepararProveedores" onclick="repararProveedores()">Reparar proveedores</button>
                     </div>
                 </form>
             </div>
@@ -5303,6 +5304,7 @@
                         <ul style="margin-left: 1.5rem; margin-bottom: 1rem;">
                             <li><strong>Editar / Marcar vacía o ocupada / Eliminar:</strong> Desde la tabla de unidades</li>
                             <li><strong>Resumen:</strong> Total unidades, ocupadas, vacías y porcentaje de ocupación</li>
+                            <li><strong>Persistencia:</strong> La ocupación no se archiva al cerrar el mes; el listado y el mapa muestran siempre el estado actual (también puede editarse al consultar meses archivados)</li>
                         </ul>
                         <p style="margin-bottom: 0.5rem;"><strong>En el reporte de fin de mes:</strong></p>
                         <ul style="margin-left: 1.5rem;">
@@ -7222,10 +7224,14 @@
                     const docRef = db.collection('comunidad').doc(key);
                     const doc = await docRef.get();
                     if (doc.exists) {
-                        const data = doc.data();
-                        // Asegurar que siempre devolvemos un array
-                        const resultado = data.datos || [];
-                        return Array.isArray(resultado) ? resultado : [];
+                        const data = doc.data() || {};
+                        // Asegurar que siempre devolvemos un array (compatibilidad con estructuras antiguas)
+                        const resultado = data.datos;
+                        if (Array.isArray(resultado)) return resultado;
+                        if (resultado && typeof resultado === 'object') {
+                            return Object.values(resultado).filter(v => v && typeof v === 'object');
+                        }
+                        return [];
                     }
                 } catch (error) {
                     console.error('Error al leer de Firestore:', error);
@@ -7238,7 +7244,11 @@
                 const datos = localStorage.getItem(key);
                 if (datos) {
                     const parsed = JSON.parse(datos);
-                    return Array.isArray(parsed) ? parsed : [];
+                    if (Array.isArray(parsed)) return parsed;
+                    if (parsed && typeof parsed === 'object') {
+                        return Object.values(parsed).filter(v => v && typeof v === 'object');
+                    }
+                    return [];
                 }
             } catch (error) {
                 console.error('Error al leer de LocalStorage:', error);
@@ -7567,8 +7577,60 @@
         // FUNCIONES DE FIRESTORE (con respaldo LocalStorage)
         // ============================================
         
+        // Ocupación: un solo documento persistente (no se archiva con el cierre de mes)
+        const OCUPACION_DOC_ID = 'ocupacion-residentes';
+
         // Función para obtener datos del mes actual o del mes en consulta
         async function obtenerDatosMes(key) {
+            if (key === 'ocupacion-residentes') {
+                if (firebaseInitialized && db) {
+                    try {
+                        const docRef = db.collection('comunidad').doc(OCUPACION_DOC_ID);
+                        const doc = await docRef.get();
+                        if (doc.exists) {
+                            const data = doc.data();
+                            const resultado = Array.isArray(data.datos) ? data.datos : [];
+                            if (resultado.length > 0) return resultado;
+                        }
+                    } catch (error) {
+                        console.error('Error al leer ocupación persistente (Firestore):', error);
+                    }
+                }
+                try {
+                    const datos = localStorage.getItem(OCUPACION_DOC_ID);
+                    if (datos) {
+                        const parsed = JSON.parse(datos);
+                        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+                    }
+                } catch (error) {
+                    console.error('Error al leer ocupación persistente (LocalStorage):', error);
+                }
+                const mesActual = obtenerMesActual();
+                const mesConsulta = window.mesEnConsulta || mesActual;
+                const clavesLegacy = [`${key}_${mesConsulta}`, `${key}_${mesActual}`];
+                for (const lk of clavesLegacy) {
+                    if (firebaseInitialized && db) {
+                        try {
+                            const docRef = db.collection('comunidad').doc(lk);
+                            const doc = await docRef.get();
+                            if (doc.exists) {
+                                const data = doc.data();
+                                const resultado = Array.isArray(data.datos) ? data.datos : [];
+                                if (resultado.length > 0) return resultado;
+                            }
+                        } catch (e) { /* continuar */ }
+                    }
+                    try {
+                        const datosLS = localStorage.getItem(lk);
+                        if (datosLS) {
+                            const parsed = JSON.parse(datosLS);
+                            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+                        }
+                    } catch (e) { /* continuar */ }
+                }
+                return [];
+            }
+
             const mesActual = obtenerMesActual();
             const mesConsulta = window.mesEnConsulta || mesActual;
             
@@ -7758,18 +7820,22 @@
             const mesActual = obtenerMesActual();
             // Si hay un mes reabierto, guardar en ese mes; si no, guardar en el mes actual
             const mesAGuardar = (window.mesReabierto && window.mesEnConsulta) ? window.mesEnConsulta : mesActual;
-            const docKey = `${key}_${mesAGuardar}`;
+            const esOcupacionGlobal = key === 'ocupacion-residentes';
+            const docKey = esOcupacionGlobal ? OCUPACION_DOC_ID : `${key}_${mesAGuardar}`;
             
             // Intentar guardar en Firestore
             if (firebaseInitialized && db) {
                 try {
-                    await db.collection('comunidad').doc(docKey).set({
+                    const payload = {
                         datos: datos,
-                        mes: mesAGuardar,
                         modulo: key,
-                        actualizado: firebase.firestore.FieldValue.serverTimestamp(),
-                        reabierto: window.mesReabierto || false
-                    });
+                        actualizado: firebase.firestore.FieldValue.serverTimestamp()
+                    };
+                    if (!esOcupacionGlobal) {
+                        payload.mes = mesAGuardar;
+                        payload.reabierto = window.mesReabierto || false;
+                    }
+                    await db.collection('comunidad').doc(docKey).set(payload);
                     console.log(`Datos guardados en Firestore: ${docKey}`);
                 } catch (error) {
                     console.error('Error al guardar en Firestore:', error);
@@ -7870,7 +7936,7 @@
             if (ultimoMes !== mesActual) {
                 // Archivar datos del mes anterior si existe
                 if (ultimoMes) {
-                    const modulos = ['mudanzas', 'aperturas', 'tarjetas', 'espacios', 'multas', 'morosos', 'ocupacion-residentes', 'caja', 'mantenciones', 'visitas-extraordinarias', 'pagosAseo', 'nomina', 'nomina-reemplazos', 'insumos'];
+                    const modulos = ['mudanzas', 'aperturas', 'tarjetas', 'espacios', 'multas', 'morosos', 'caja', 'mantenciones', 'visitas-extraordinarias', 'pagosAseo', 'nomina', 'nomina-reemplazos', 'insumos'];
                     
                     for (const modulo of modulos) {
                         const docKey = `${modulo}_${ultimoMes}`;
@@ -11944,7 +12010,7 @@
             const periodo = document.getElementById('proveedorPeriodo').value;
             const ultimaFecha = document.getElementById('proveedorUltimaFecha').value || null;
 
-            const proveedores = await obtenerDatos('proveedores');
+            const proveedores = await obtenerProveedoresNormalizados();
 
             if (!Array.isArray(proveedores)) {
                 console.error('Error: proveedores no es un array');
@@ -11981,8 +12047,58 @@
                 .replace(/</g, '&lt;');
         }
 
+        function normalizarListaProveedores(lista) {
+            if (!Array.isArray(lista)) return [];
+            const mapa = new Map();
+            lista.forEach((p) => {
+                if (!p || !p.nombre) return;
+                const idTexto = p.id != null && String(p.id).length > 0 ? String(p.id) : '';
+                const clave = idTexto ? `id:${idTexto}` : `nombre:${String(p.nombre).toLowerCase()}`;
+                if (mapa.has(clave)) return;
+                mapa.set(clave, {
+                    id: idTexto || generarId(),
+                    nombre: String(p.nombre || '').trim(),
+                    servicios: String(p.servicios || '').trim(),
+                    periodo: p.periodo || 'm3',
+                    ultimaFecha: p.ultimaFecha || null
+                });
+            });
+            return Array.from(mapa.values());
+        }
+
+        async function obtenerProveedoresNormalizados() {
+            const proveedoresFuente = await obtenerDatos('proveedores');
+            let proveedores = Array.isArray(proveedoresFuente) ? [...proveedoresFuente] : [];
+            try {
+                const ls = JSON.parse(localStorage.getItem('proveedores') || '[]');
+                if (Array.isArray(ls) && ls.length > 0) {
+                    proveedores = [...proveedores, ...ls];
+                }
+            } catch (_) {}
+            return normalizarListaProveedores(proveedores);
+        }
+
+        async function repararProveedores() {
+            const confirmado = await confirmarAccion('Se unificarán y normalizarán los proveedores guardados (nube y navegador). ¿Desea continuar?', 'Reparar proveedores');
+            if (!confirmado) return;
+            const btn = document.getElementById('btnRepararProveedores');
+            if (btn) btn.disabled = true;
+            try {
+                const normalizados = await obtenerProveedoresNormalizados();
+                await guardarDatos('proveedores', normalizados);
+                await cargarProveedores();
+                await cargarSelectProveedores();
+                mostrarAlerta(`Reparación completada. ${normalizados.length} proveedor(es) normalizado(s).`, 'Éxito');
+            } catch (error) {
+                console.error('Error al reparar proveedores:', error);
+                mostrarAlerta('No se pudo completar la reparación de proveedores.', 'Error');
+            } finally {
+                if (btn) btn.disabled = false;
+            }
+        }
+
         async function cargarProveedores() {
-            const proveedores = await obtenerDatos('proveedores');
+            const proveedores = await obtenerProveedoresNormalizados();
             const tbody = document.getElementById('tbodyProveedores');
             
             if (!tbody) {
@@ -12072,7 +12188,7 @@
         async function eliminarProveedor(id, nombreFallback) {
             const confirmado = await confirmarAccion('¿Está seguro de eliminar este proveedor? Esto no eliminará las mantenciones asociadas.', 'Eliminar Proveedor');
             if (!confirmado) return;
-            const proveedores = await obtenerDatos('proveedores');
+            const proveedores = await obtenerProveedoresNormalizados();
             if (!Array.isArray(proveedores)) return;
             let filtrados;
             if (id != null && String(id).length > 0) {
@@ -12089,7 +12205,7 @@
         }
 
         async function cargarSelectProveedores() {
-            const proveedores = await obtenerDatos('proveedores');
+            const proveedores = await obtenerProveedoresNormalizados();
             const select = document.getElementById('mantencionProveedor');
             
             if (!select) return;
@@ -16089,20 +16205,20 @@
                     avisoSoloLectura.innerHTML = '📋 Consultando <strong>' + (nombreMesConsulta || window.mesEnConsulta) + '</strong> (solo lectura). Los datos no se pueden editar. Para editar, reabra el mes desde el Panel de Control.';
                     avisoSoloLectura.style.display = 'block';
                 }
-                // Deshabilitar formularios en modo consulta (solo lectura)
+                // Deshabilitar formularios en modo consulta (solo lectura); ocupación sigue editable (datos persistentes)
                 forms.forEach(form => {
-                    if (form.id !== 'formProveedor') { // Los proveedores siempre se pueden gestionar
+                    if (form.id !== 'formProveedor' && !form.closest('#ocupacionResidentes')) {
                         form.style.opacity = '0.6';
                         form.style.pointerEvents = 'none';
                     }
                 });
                 inputs.forEach(input => {
-                    if (!input.closest('#formProveedor')) {
+                    if (!input.closest('#formProveedor') && !input.closest('#ocupacionResidentes')) {
                         input.disabled = true;
                     }
                 });
                 submitButtons.forEach(btn => {
-                    if (!btn.closest('#formProveedor')) {
+                    if (!btn.closest('#formProveedor') && !btn.closest('#ocupacionResidentes')) {
                         btn.disabled = true;
                         btn.style.opacity = '0.5';
                     }
@@ -16129,7 +16245,7 @@
             const select = document.getElementById('mesConsulta');
             if (!select) return;
             
-            const modulos = ['mudanzas', 'aperturas', 'tarjetas', 'espacios', 'multas', 'morosos', 'ocupacion-residentes', 'caja', 'mantenciones', 'visitas-extraordinarias', 'pagosAseo', 'nomina', 'nomina-reemplazos', 'insumos'];
+            const modulos = ['mudanzas', 'aperturas', 'tarjetas', 'espacios', 'multas', 'morosos', 'caja', 'mantenciones', 'visitas-extraordinarias', 'pagosAseo', 'nomina', 'nomina-reemplazos', 'insumos'];
             const mesesArchivados = new Set();
             const mesesReabiertos = new Set();
             const mesActual = obtenerMesActual();
@@ -16335,7 +16451,7 @@
             
             if (mesSeleccionado !== mesActual) {
                 // Verificar si hay datos activos en Firestore o LocalStorage
-                const modulos = ['mudanzas', 'aperturas', 'tarjetas', 'espacios', 'multas', 'morosos', 'ocupacion-residentes', 'caja', 'mantenciones', 'visitas-extraordinarias', 'pagosAseo', 'nomina', 'nomina-reemplazos', 'insumos', 'lecturasAguaCaliente'];
+                const modulos = ['mudanzas', 'aperturas', 'tarjetas', 'espacios', 'multas', 'morosos', 'caja', 'mantenciones', 'visitas-extraordinarias', 'pagosAseo', 'nomina', 'nomina-reemplazos', 'insumos', 'lecturasAguaCaliente'];
                 let tieneDatosActivos = false;
                 
                 // Verificar en Firestore primero
@@ -16747,7 +16863,16 @@
         async function cargarDatosModulo(modulo, mesAnio, esPrevisualizacion) {
             try {
                 let datos = null;
-                if (esPrevisualizacion) {
+                if (modulo === 'ocupacion-residentes') {
+                    if (esPrevisualizacion) {
+                        datos = await obtenerDatosMes(modulo);
+                    } else {
+                        datos = await obtenerDatosArchivados(modulo, mesAnio);
+                        if (!datos || !Array.isArray(datos) || datos.length === 0) {
+                            datos = await obtenerDatosMes(modulo);
+                        }
+                    }
+                } else if (esPrevisualizacion) {
                     datos = await obtenerDatosMes(modulo);
                 } else {
                     // Si hay un mes reabierto, usar obtenerDatosMes que maneja datos reabiertos
@@ -18975,8 +19100,8 @@
             const progreso = mostrarProgreso('Cerrando mes y generando reporte...', 'Iniciando proceso de cierre...');
             
             try {
-                // Archivar datos del mes actual - todos los módulos relevantes
-                const modulos = ['mudanzas', 'aperturas', 'tarjetas', 'espacios', 'multas', 'morosos', 'ocupacion-residentes', 'caja', 'mantenciones', 'visitas-extraordinarias', 'pagosAseo', 'nomina', 'nomina-reemplazos', 'insumos', 'lecturasAguaCaliente'];
+                // Archivar datos del mes actual (ocupación-residentes queda persistente, no se archiva)
+                const modulos = ['mudanzas', 'aperturas', 'tarjetas', 'espacios', 'multas', 'morosos', 'caja', 'mantenciones', 'visitas-extraordinarias', 'pagosAseo', 'nomina', 'nomina-reemplazos', 'insumos', 'lecturasAguaCaliente'];
                 
                 // Obtener lecturas de agua caliente ANTES de archivarlas para poder transferirlas
                 let lecturasAguaParaTransferir = null;
@@ -19138,7 +19263,7 @@
             try {
                 mostrarAlerta('Reabriendo mes... Por favor espere.', 'Procesando');
                 
-                const modulos = ['mudanzas', 'aperturas', 'tarjetas', 'espacios', 'multas', 'morosos', 'ocupacion-residentes', 'caja', 'mantenciones', 'visitas-extraordinarias', 'pagosAseo', 'nomina', 'nomina-reemplazos', 'insumos', 'lecturasAguaCaliente'];
+                const modulos = ['mudanzas', 'aperturas', 'tarjetas', 'espacios', 'multas', 'morosos', 'caja', 'mantenciones', 'visitas-extraordinarias', 'pagosAseo', 'nomina', 'nomina-reemplazos', 'insumos', 'lecturasAguaCaliente'];
                 // Agregar módulos de configuración que también deben reabrirse
                 const modulosConfig = ['mantenciones-config', 'caja-config'];
                 let datosReabiertos = 0;
@@ -19504,6 +19629,17 @@
                     
                     // Ignorar documentos especiales
                     if (key === 'config' || key === 'proveedores') return;
+                    
+                    if (key === OCUPACION_DOC_ID) {
+                        const datosOcup = Array.isArray(data.datos) ? data.datos : [];
+                        if (datosOcup.length > 0) {
+                            if (!datosEncontrados.has('ocupacion-residentes')) {
+                                datosEncontrados.set('ocupacion-residentes', []);
+                            }
+                            datosEncontrados.get('ocupacion-residentes').push(...datosOcup);
+                        }
+                        return;
+                    }
                     
                     // Buscar datos de módulos (activos y archivados)
                     for (const modulo of modulos) {
@@ -22252,6 +22388,8 @@
                     if (modulosVisibles.indexOf('pagos-aseo') !== -1) docIds.push('pagosAseo_' + mesConsulta);
                 } else if (key === 'lecturas-agua') {
                     if (modulosVisibles.indexOf('lecturas-agua') !== -1) docIds.push('lecturasAguaCaliente_' + mesConsulta);
+                } else if (key === 'ocupacion-residentes') {
+                    if (modulosVisibles.indexOf('ocupacion-residentes') !== -1) docIds.push('ocupacion-residentes');
                 } else if (modulosVisibles.indexOf(key) !== -1) {
                     docIds.push(key + '_' + mesConsulta);
                 }

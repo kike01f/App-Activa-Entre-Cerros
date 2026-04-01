@@ -19423,7 +19423,7 @@
         const _EXCEL_FILA_TOTAL_GRIS = 'FFE8E8E8';
         const _EXCEL_TAM_TEXTO_CELDA = 14;
         const _EXCEL_TAM_TITULO_TABLA = 16;
-        const _EXCEL_MODULOS_REPORTE = ['mudanzas', 'tarjetas', 'multas', 'morosos', 'aperturas'];
+        const _EXCEL_MODULOS_REPORTE = ['mudanzas', 'tarjetas', 'espacios', 'multas', 'morosos', 'aperturas'];
 
         function _excelBordeFino() {
             return {
@@ -19592,9 +19592,10 @@
             if (!Array.isArray(modulosVisibles) || !modulosVisibles.length) modulosVisibles = _EXCEL_MODULOS_REPORTE.slice();
             const ordenModulos = _EXCEL_MODULOS_REPORTE.filter(m => modulosVisibles.includes(m));
 
-            const [mudanzas, tarjetas, multas, morosos, aperturas] = await Promise.all([
+            const [mudanzas, tarjetas, espacios, multas, morosos, aperturas] = await Promise.all([
                 ordenModulos.includes('mudanzas') ? cargarDatosModulo('mudanzas', mesAnio, esPrevisualizacion) : Promise.resolve([]),
                 ordenModulos.includes('tarjetas') ? cargarDatosModulo('tarjetas', mesAnio, esPrevisualizacion) : Promise.resolve([]),
+                ordenModulos.includes('espacios') ? cargarDatosModulo('espacios', mesAnio, esPrevisualizacion) : Promise.resolve([]),
                 ordenModulos.includes('multas') ? cargarDatosModulo('multas', mesAnio, esPrevisualizacion) : Promise.resolve([]),
                 ordenModulos.includes('morosos') ? cargarDatosModulo('morosos', mesAnio, esPrevisualizacion) : Promise.resolve([]),
                 ordenModulos.includes('aperturas') ? cargarDatosModulo('aperturas', mesAnio, esPrevisualizacion) : Promise.resolve([])
@@ -19613,6 +19614,7 @@
                 resumenLineas: [
                     `Mudanzas: ${(mudanzas || []).length} registros`,
                     `Tarjetas/TAG: ${(tarjetas || []).length} registros`,
+                    `Espacios comunes: ${(espacios || []).length} registros`,
                     `Multas: ${(multas || []).length} registros`,
                     `Morosos: ${(morosos || []).length} registros`,
                     `Aperturas: ${(aperturas || []).length} registros`
@@ -19622,6 +19624,7 @@
             const hojas = [
                 { key: 'mudanzas', nombre: 'Mudanzas', datos: generarDatosMudanzas(mudanzas || []) },
                 { key: 'tarjetas', nombre: 'Tarjetas TAG', datos: generarDatosTarjetas(tarjetas || []) },
+                { key: 'espacios', nombre: 'Espacios Comunes', datos: generarDatosEspacios(espacios || []) },
                 { key: 'multas', nombre: 'Multas', datos: _generarDatosMultasConTotales(multas || []) },
                 { key: 'morosos', nombre: 'Morosos', datos: generarDatosMorosos(morosos || []) },
                 { key: 'aperturas', nombre: 'Aperturas', datos: generarDatosAperturas(aperturas || []) }

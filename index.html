@@ -5648,6 +5648,7 @@
                         <a href="#seccion-pagos-aseo" onclick="scrollToManualSection('seccion-pagos-aseo'); return false;" style="color: var(--primary); text-decoration: none; padding: 0.5rem; border-radius: 6px; transition: background 0.2s; cursor: pointer;" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">🧹 Pagos Aseo</a>
                         <a href="#seccion-nomina" onclick="scrollToManualSection('seccion-nomina'); return false;" style="color: var(--primary); text-decoration: none; padding: 0.5rem; border-radius: 6px; transition: background 0.2s; cursor: pointer;" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">💼 Nómina</a>
                         <a href="#seccion-insumos" onclick="scrollToManualSection('seccion-insumos'); return false;" style="color: var(--primary); text-decoration: none; padding: 0.5rem; border-radius: 6px; transition: background 0.2s; cursor: pointer;" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">🛒 Pedido de Insumos</a>
+                        <a href="#seccion-gestion-tareas" onclick="scrollToManualSection('seccion-gestion-tareas'); return false;" style="color: var(--primary); text-decoration: none; padding: 0.5rem; border-radius: 6px; transition: background 0.2s; cursor: pointer;" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">📋 Gestión de Tareas</a>
                         <a href="#seccion-personalizacion" onclick="scrollToManualSection('seccion-personalizacion'); return false;" style="color: var(--primary); text-decoration: none; padding: 0.5rem; border-radius: 6px; transition: background 0.2s; cursor: pointer;" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">⚙️ Personalización</a>
                         <a href="#seccion-reportes" onclick="scrollToManualSection('seccion-reportes'); return false;" style="color: var(--primary); text-decoration: none; padding: 0.5rem; border-radius: 6px; transition: background 0.2s; cursor: pointer;" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">📄 Reportes</a>
                         <a href="#seccion-consejos" onclick="scrollToManualSection('seccion-consejos'); return false;" style="color: var(--primary); text-decoration: none; padding: 0.5rem; border-radius: 6px; transition: background 0.2s; cursor: pointer;" onmouseover="this.style.background='var(--bg-tertiary)'" onmouseout="this.style.background='transparent'">💡 Consejos y Buenas Prácticas</a>
@@ -6126,6 +6127,35 @@
                     </div>
                 </div>
 
+                <!-- SECCIÓN: GESTIÓN DE TAREAS -->
+                <div id="seccion-gestion-tareas" style="background: var(--bg-primary); border-radius: 12px; border: 1px solid var(--border-color); padding: 2rem; margin-bottom: 2rem;">
+                    <h3 style="margin: 0 0 1rem 0; font-size: 1.25rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
+                        <span>📋</span> Módulo de Gestión de Tareas
+                    </h3>
+                    <div style="color: var(--text-secondary); line-height: 1.7;">
+                        <p style="margin-bottom: 1rem;">
+                            Planifique y dé seguimiento al trabajo del edificio (limpieza, mantenciones, reclamos de residentes, turnos y gestión interna) con un tablero tipo Kanban y una vista lista. Acceda desde el menú lateral <strong>Gestión de Tareas</strong> o desde la tarjeta homónima en el Panel de Control.
+                        </p>
+                        <p style="margin-bottom: 0.5rem;"><strong>Qué puede hacer:</strong></p>
+                        <ul style="margin-left: 1.5rem; margin-bottom: 1rem;">
+                            <li><strong>Crear y editar tareas:</strong> título, descripción, fecha de inicio y vencimiento, prioridad (alta, media, baja), estado (pendiente, en proceso, completada), responsable y categoría (Aseo, Mantención, Seguridad, Administración, Otros).</li>
+                            <li><strong>Vista tablero:</strong> tres columnas por estado; arrastre las tarjetas entre columnas para cambiar el estado.</li>
+                            <li><strong>Vista lista:</strong> tabla con las mismas tareas y acciones rápidas.</li>
+                            <li><strong>Filtros y búsqueda:</strong> por estado, prioridad, categoría, responsable (texto parcial) y buscador general.</li>
+                            <li><strong>Alertas:</strong> avisos en el módulo para tareas vencidas y próximas a vencer; semáforo en la tarjeta del panel según carga de trabajo.</li>
+                            <li><strong>Resumen:</strong> totales de tareas, pendientes/en proceso, completadas y vencidas.</li>
+                            <li><strong>Comentarios y notas:</strong> comentarios con fecha en cada tarea; campo de notas adjuntas en texto; historial básico de cambios.</li>
+                            <li><strong>Guardado:</strong> los datos se almacenan en el navegador (localStorage de este equipo); no se sincronizan con Firebase.</li>
+                        </ul>
+                        <p style="margin-bottom: 0.5rem;"><strong>Consejos:</strong></p>
+                        <ul style="margin-left: 1.5rem; margin-bottom: 0;">
+                            <li>Use responsables claros (por ejemplo, “Conserje turno noche”, “Administración”) para filtrar después.</li>
+                            <li>Al eliminar una tarea, la acción es definitiva; el sistema pide confirmación.</li>
+                            <li>Si no ve tareas, el módulo puede cargar datos de ejemplo la primera vez; puede borrar la clave <code style="background:var(--bg-tertiary);padding:0.1rem 0.35rem;border-radius:4px;font-size:0.85em;">gestion_comunidad_tareas_v1</code> en almacenamiento local solo si desea reiniciar (herramientas de desarrollo del navegador).</li>
+                        </ul>
+                    </div>
+                </div>
+
                 <!-- SECCIÓN: PERSONALIZACIÓN -->
                 <div id="seccion-personalizacion" style="background: var(--bg-primary); border-radius: 12px; border: 1px solid var(--border-color); padding: 2rem; margin-bottom: 2rem;">
                     <h3 style="margin: 0 0 1rem 0; font-size: 1.25rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 0.5rem;">
@@ -6141,7 +6171,7 @@
                             <li><strong>Jefe de Edificio:</strong> Nombre del administrador</li>
                             <li><strong>Número de Departamentos:</strong> Total de unidades (referencia para reportes)</li>
                             <li><strong>Tema:</strong> Modo claro u oscuro para toda la aplicación</li>
-                            <li><strong>Módulos visibles:</strong> Desde el Panel de Control puede activar o desactivar qué módulos aparecen en el menú (Mudanzas, Aperturas, Tarjetas, Espacios, Multas, Morosos, Ocupación y Residentes, Lecturas Agua, Caja Chica, Mantenciones, Pagos Aseo, Nómina, Insumos)</li>
+                            <li><strong>Módulos visibles:</strong> Desde el Panel de Control puede activar o desactivar qué módulos aparecen en el menú (Mudanzas, Aperturas, Tarjetas, Espacios, Multas, Morosos, Ocupación y Residentes, Lecturas Agua, Caja Chica, Mantenciones, Pagos Aseo, Nómina, Insumos). <em>Gestión de Tareas</em> está siempre disponible en el menú y con tarjeta de acceso en el panel.</li>
                         </ul>
                         <p style="margin-bottom: 0.5rem;"><strong>Importante:</strong></p>
                         <ul style="margin-left: 1.5rem;">
@@ -6243,6 +6273,7 @@
                                 <li><strong>Multas con UF/UTM:</strong> Puede elegir el tipo de unidad (UF o UTM) al registrar multas</li>
                                 <li><strong>Morosos:</strong> Estado (pendiente, en cobranza, convenio, regularizado, judicial) e indicador de servicio eléctrico suspendido</li>
                                 <li><strong>Progreso de Nómina:</strong> Cálculo basado en datos de personal completados</li>
+                                <li><strong>Gestión de Tareas:</strong> Tablero Kanban y vista lista para tareas del edificio (aseo, mantención, seguridad, administración); filtros, búsqueda, comentarios, notas, historial y guardado local; tarjeta de acceso en el Panel de Control</li>
                             </ul>
                         </div>
                         <div>
@@ -15843,7 +15874,8 @@
                 'Lecturas Agua Caliente': 'lecturasAgua',
                 'Última Nómina': 'nomina',
                 'Postventa': 'postventa',
-                'Balance Neto': 'dashboard'
+                'Balance Neto': 'dashboard',
+                'Gestión de Tareas': 'gestionTareas'
             };
             return map[title] || null;
         }
@@ -21763,7 +21795,8 @@
                 'proveedores': '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M12 7V3H2v18h20V7H12zM6 19H4v-2h2v2zm0-4H4v-2h2v2zm0-4H4V9h2v2zm0-4H4V5h2v2zm4 12H8v-2h2v2zm0-4H8v-2h2v2zm0-4H8V9h2v2zm0-4H8V5h2v2zm10 12h-8v-2h2v-2h-2v-2h2v-2h-2V9h8v10zm-2-8h-2v2h2v-2zm0 4h-2v2h2v-2z"/><circle fill="currentColor" cx="16" cy="11" r="1.5"/></svg>',
                 'insumos': '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M19 7h-3V6c0-2.76-2.24-5-5-5S6 3.24 6 6v1H3c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zM8 6c0-1.66 1.34-3 3-3s3 1.34 3 3v1H8V6zm11 14H5V9h14v11z"/><path fill="currentColor" d="M9 11h6v6H9z" opacity="0.2"/><path fill="currentColor" d="M10 12h4v1h-4zm0 2h4v1h-4z" opacity="0.5"/></svg>',
                 'agua': '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/><path fill="currentColor" d="M12 2L2 12l10 10 10-10L12 2zm0 2.83L19.17 12 12 19.17 4.83 12 12 4.83z" opacity="0.3"/><path fill="currentColor" d="M12 6c-3.31 0-6 2.69-6 6s2.69 6 6 6 6-2.69 6-6-2.69-6-6-6zm0 10c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/><circle fill="currentColor" cx="12" cy="12" r="2" opacity="0.6"/></svg>',
-                'ocupacion': '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8h5z"/></svg>'
+                'ocupacion': '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8h5z"/></svg>',
+                'tareas': '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>'
             };
             
             // Mapeo de emojis a tipos
@@ -22917,6 +22950,43 @@
             }
             }
 
+            (function agregarTarjetaGestionTareasPanel() {
+                let totalT = 0, pendActivas = 0, vencidas = 0;
+                try {
+                    const raw = localStorage.getItem('gestion_comunidad_tareas_v1');
+                    if (raw) {
+                        const arr = JSON.parse(raw);
+                        if (Array.isArray(arr)) {
+                            totalT = arr.length;
+                            const hoyFin = new Date();
+                            arr.forEach(function (t) {
+                                if (!t) return;
+                                if (t.estado === 'pendiente' || t.estado === 'en_proceso') pendActivas++;
+                                if (t.fechaVencimiento && t.estado !== 'completada') {
+                                    const d = new Date(t.fechaVencimiento);
+                                    d.setHours(23, 59, 59, 999);
+                                    if (d < hoyFin) vencidas++;
+                                }
+                            });
+                        }
+                    }
+                } catch (e) { /* ignorar */ }
+                stats.push({
+                    title: 'Gestión de Tareas',
+                    value: totalT,
+                    subtitle: vencidas > 0
+                        ? `${vencidas} vencida${vencidas !== 1 ? 's' : ''} · ${pendActivas} activa${pendActivas !== 1 ? 's' : ''}`
+                        : `${pendActivas} pendiente${pendActivas !== 1 ? 's' : ''} / en proceso`,
+                    icon: 'tareas',
+                    iconClass: vencidas > 0 ? 'danger' : (pendActivas > 5 ? 'warning' : 'primary'),
+                    gradient: vencidas > 0
+                        ? 'linear-gradient(135deg, rgba(220, 38, 38, 0.12) 0%, rgba(220, 38, 38, 0.05) 100%)'
+                        : 'linear-gradient(135deg, rgba(117, 187, 33, 0.15) 0%, rgba(117, 187, 33, 0.05) 100%)',
+                    semaforo: vencidas > 0 ? 'rojo' : (pendActivas > 5 ? 'amarillo' : 'verde'),
+                    onClickTab: 'gestionTareas'
+                });
+            })();
+
             stats.forEach(function (st) {
                 if (!st.onClickTab) {
                     var t = dashboardTarjetaTabPorTitulo(st.title);
@@ -22996,6 +23066,7 @@
                 else if (stat.title === 'Proveedores') iconoTipo = 'proveedores';
                 else if (stat.title === 'Lecturas Agua Caliente') iconoTipo = 'agua';
                 else if (stat.title === 'Pedido de Insumos') iconoTipo = 'insumos';
+                else if (stat.title === 'Gestión de Tareas') iconoTipo = 'tareas';
                 else if (stat.title === 'Balance Neto') iconoTipo = 'dashboard';
                 
                 const iconoSVG = obtenerIconoSVG(iconoTipo);
@@ -23170,6 +23241,7 @@
                     else if (stat.title === 'Proveedores') iconoTipo = 'proveedores';
                     else if (stat.title === 'Lecturas Agua Caliente') iconoTipo = 'agua';
                     else if (stat.title === 'Pedido de Insumos') iconoTipo = 'insumos';
+                    else if (stat.title === 'Gestión de Tareas') iconoTipo = 'tareas';
                     else if (stat.title === 'Balance Neto') iconoTipo = 'dashboard';
                     var iconoSVG = typeof obtenerIconoSVG === 'function' ? obtenerIconoSVG(iconoTipo) : '';
                     var subHTML = stat.subtitle ? '<div class="dashboard2-card-sub">' + stat.subtitle + '</div>' : '';
@@ -23481,6 +23553,17 @@
         // Función para procesar recordatorios (MEJORADA - analiza todos los módulos)
         async function procesarRecordatorios(morosos, mantenciones, pagosAseo, proveedores, mudanzas, aperturas, tarjetas, espacios, multas, caja, nomina, insumos, lecturasAgua, metricasActual, metricasAnterior, diasRestantes, insumosCerrado = false, nominaCerrada = false) {
             const recordatorios = [];
+
+            // Novedad: módulo Gestión de Tareas (aviso hasta el 10 de abril de 2026 inclusive)
+            (function recordatorioModuloGestionTareas() {
+                const finAviso = new Date(2026, 3, 10, 23, 59, 59, 999);
+                if (new Date() > finAviso) return;
+                recordatorios.push({
+                    tipo: 'info',
+                    mensaje: '📋 Nuevo módulo Gestión de Tareas (menú lateral): organice limpieza, mantenciones, reclamos y turnos. Vista tablero Kanban (Pendiente / En proceso / Completada) y vista lista; cree y edite tareas con título, descripción, fechas de inicio y vencimiento, prioridad, estado, responsable y categoría (Aseo, Mantención, Seguridad, Administración, Otros). Filtros por estado, prioridad, categoría y responsable, buscador de texto, arrastre de tarjetas entre columnas, comentarios, notas adjuntas en texto, historial de cambios, alertas de tareas próximas a vencer y vencidas, panel resumen con totales y datos guardados en localStorage del navegador. Consulte el Manual de usuario, sección Gestión de Tareas. Este mensaje deja de mostrarse después del 10 de abril de 2026.',
+                    icono: '📋'
+                });
+            })();
             
             // ============================================
             // 1. RECORDATORIOS DE CIERRE DE MES

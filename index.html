@@ -16661,6 +16661,16 @@
             return `${meses[parseInt(month) - 1]} ${year}`;
         }
 
+        /** Período que deben usar reportes y exportaciones: mes explícito, o mes en consulta (archivado o reabierto), o mes calendario actual. */
+        function resolverMesReporte(mesAnioParam) {
+            const mesCalendario = obtenerMesActual();
+            let mes = (mesAnioParam && String(mesAnioParam).trim()) ? mesAnioParam : (window.mesEnConsulta || mesCalendario);
+            if (mes === mesCalendario && window.mesEnConsulta && window.mesEnConsulta !== mesCalendario) {
+                mes = window.mesEnConsulta;
+            }
+            return mes;
+        }
+
         // ============================================
         // SISTEMA DE REPORTE DE CIERRE DE MES - NUEVO
         // ============================================
@@ -16919,16 +16929,15 @@
             try {
                 let datos = null;
                 if (modulo === 'ocupacion-residentes') {
-                    if (esPrevisualizacion) {
+                    datos = await obtenerDatosArchivados(modulo, mesAnio);
+                    if (!datos || !Array.isArray(datos) || datos.length === 0) {
                         datos = await obtenerDatosMes(modulo);
-                    } else {
-                        datos = await obtenerDatosArchivados(modulo, mesAnio);
-                        if (!datos || !Array.isArray(datos) || datos.length === 0) {
-                            datos = await obtenerDatosMes(modulo);
-                        }
                     }
                 } else if (esPrevisualizacion) {
-                    datos = await obtenerDatosMes(modulo);
+                    datos = await obtenerDatosMesEspecifico(modulo, mesAnio);
+                    if (!datos || datos.length === 0) {
+                        datos = await obtenerDatosMes(modulo);
+                    }
                 } else {
                     // Si hay un mes reabierto, usar obtenerDatosMes que maneja datos reabiertos
                     // Si no, usar obtenerDatosArchivados
@@ -16957,6 +16966,8 @@
             mostrarProgreso('Generando reporte mensual...');
             
             try {
+                mesAnio = resolverMesReporte(mesAnio);
+                nombreMes = obtenerNombreMes(mesAnio);
                 console.log('📊 Iniciando generación de reporte:', { mesAnio, nombreMes, esPrevisualizacion });
                 
                 // Función helper para formatear números sin forzar decimales
@@ -18140,6 +18151,8 @@
             mostrarProgreso('Generando reporte Excel...');
             
             try {
+                mesAnio = resolverMesReporte(mesAnio);
+                nombreMes = obtenerNombreMes(mesAnio);
                 // Obtener configuración de personalización del encabezado
                 let nombreComunidad = 'Comunidad';
                 let jefeEdificio = 'No especificado';
@@ -18178,13 +18191,18 @@
                 
                 // Cargar lecturas de agua caliente si el módulo está visible
                 if (modulosVisibles.includes('lecturas-agua')) {
-                    datosPromesas.push(
-                        esPrevisualizacion 
-                            ? obtenerDatosMes('lecturasAguaCaliente').catch(() => [])
-                            : (window.mesReabierto && window.mesEnConsulta === mesAnio)
-                                ? obtenerDatosMes('lecturasAguaCaliente').catch(() => [])
-                                : obtenerDatosArchivados('lecturasAguaCaliente', mesAnio).catch(() => [])
-                    );
+                    datosPromesas.push((async () => {
+                        let L;
+                        if (esPrevisualizacion) {
+                            L = await obtenerDatosMesEspecifico('lecturasAguaCaliente', mesAnio).catch(() => []);
+                            if (!L || !L.length) L = await obtenerDatosMes('lecturasAguaCaliente').catch(() => []);
+                        } else if (window.mesReabierto && window.mesEnConsulta === mesAnio) {
+                            L = await obtenerDatosMes('lecturasAguaCaliente').catch(() => []);
+                        } else {
+                            L = await obtenerDatosArchivados('lecturasAguaCaliente', mesAnio).catch(() => []);
+                        }
+                        return L;
+                    })());
                 } else {
                     datosPromesas.push(Promise.resolve([]));
                 }
@@ -19104,19 +19122,19 @@
         window.previsualizarReportePDF = async function() {
             
             try {
-                const mesActual = obtenerMesActual();
-                const nombreMes = obtenerNombreMes(mesActual);
+                const mesReporte = resolverMesReporte(null);
+                const nombreMes = obtenerNombreMes(mesReporte);
                 
-                console.log('📋 Iniciando previsualización del reporte:', { mesActual, nombreMes });
+                console.log('📋 Iniciando previsualización del reporte:', { mesReporte, nombreMes });
                 
                 // Mostrar progreso
-                mostrarProgreso('Generando previsualización del reporte...', 'Cargando datos del mes actual...');
+                mostrarProgreso('Generando previsualización del reporte...', 'Cargando datos del período seleccionado...');
                 
                 // Pequeña pausa para asegurar que el modal se muestre
                 await new Promise(resolve => setTimeout(resolve, 100));
                 
-                // Generar el reporte en modo previsualización
-                await generarReportePDF(mesActual, nombreMes, true);
+                // Generar el reporte en modo previsualización (mismo mes que consulta histórica o mes actual)
+                await generarReportePDF(mesReporte, nombreMes, true);
                 
                 console.log('✅ Previsualización generada exitosamente');
                 
@@ -20332,8 +20350,14 @@
 
         // Función para generar reporte de Caja Chica en PDF
         async function generarReporteCajaChicaPDF(mesAnio, nombreMes, usarMesActual = false) {
-            // Si no se especifica usarMesActual, verificar si es el mes actual o reabierto
             const mesActual = obtenerMesActual();
+            if (usarMesActual) {
+                mesAnio = mesActual;
+                nombreMes = obtenerNombreMes(mesAnio);
+            } else {
+                mesAnio = resolverMesReporte(mesAnio);
+                nombreMes = obtenerNombreMes(mesAnio);
+            }
             const esMesActual = usarMesActual || (mesAnio === mesActual);
             const esMesReabierto = window.mesReabierto && window.mesEnConsulta === mesAnio;
             const caja = (esMesActual || esMesReabierto) ? await obtenerDatosMes('caja') : await obtenerDatosArchivados('caja', mesAnio);
@@ -20507,6 +20531,14 @@
 
         // Reporte PDF/HTML del módulo Mantenciones (mes archivado, actual o reabierto)
         async function generarReporteMantencionesPDF(mesAnio, nombreMes, usarMesActual = false) {
+            const mesCalRef = obtenerMesActual();
+            if (usarMesActual) {
+                mesAnio = mesCalRef;
+                nombreMes = obtenerNombreMes(mesAnio);
+            } else {
+                mesAnio = resolverMesReporte(mesAnio);
+                nombreMes = obtenerNombreMes(mesAnio);
+            }
             const esc = (x) => String(x ?? '')
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
@@ -24737,7 +24769,7 @@
                 if (btnDescargarExcel) {
                     btnDescargarExcel.addEventListener('click', async function() {
                         try {
-                            const mesParaReporte = (window.mesReabierto && window.mesEnConsulta) ? window.mesEnConsulta : obtenerMesActual();
+                            const mesParaReporte = resolverMesReporte(null);
                             const nombreMes = obtenerNombreMes(mesParaReporte);
                             await generarReporteExcel(mesParaReporte, nombreMes, true);
                         } catch (error) {
@@ -25165,10 +25197,10 @@
                 const btnDescargarReporteCaja = document.getElementById('btnDescargarReporteCaja');
                 if (btnDescargarReporteCaja) {
                     btnDescargarReporteCaja.addEventListener('click', async function() {
-                        const mesActual = obtenerMesActual();
-                        const nombreMes = obtenerNombreMes(mesActual);
+                        const mesRep = resolverMesReporte(null);
+                        const nombreMes = obtenerNombreMes(mesRep);
                         if (typeof window.generarReporteCajaChicaPDF === 'function') {
-                            await window.generarReporteCajaChicaPDF(mesActual, nombreMes);
+                            await window.generarReporteCajaChicaPDF(mesRep, nombreMes);
                         } else {
                             mostrarAlerta('Función de descarga de reporte de caja chica no disponible.', 'Error');
                         }
@@ -25179,10 +25211,10 @@
                 const btnDescargarReporteMantenciones = document.getElementById('btnDescargarReporteMantenciones');
                 if (btnDescargarReporteMantenciones) {
                     btnDescargarReporteMantenciones.addEventListener('click', async function() {
-                        const mesActual = obtenerMesActual();
-                        const nombreMes = obtenerNombreMes(mesActual);
+                        const mesRep = resolverMesReporte(null);
+                        const nombreMes = obtenerNombreMes(mesRep);
                         if (typeof window.generarReporteMantencionesPDF === 'function') {
-                            await window.generarReporteMantencionesPDF(mesActual, nombreMes, true);
+                            await window.generarReporteMantencionesPDF(mesRep, nombreMes, false);
                         } else {
                             mostrarAlerta('Función de descarga de reporte de mantenciones no disponible.', 'Error');
                         }

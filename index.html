@@ -1387,23 +1387,56 @@
             height: 8px;
             border-radius: 50%;
         }
-        /* Novedad módulo Gestión de Tareas (mostaza; oculta automáticamente tras la fecha tope) */
+        /* Novedad módulo Gestión de Tareas: franja superior centrada (no cubre icono ni semáforo) */
+        @keyframes dashboard2-new-badge-neon {
+            0%, 100% {
+                transform: translateX(-50%);
+                box-shadow:
+                    0 0 5px rgba(255, 230, 140, 0.45),
+                    0 0 12px rgba(212, 175, 55, 0.35),
+                    0 0 20px rgba(201, 162, 39, 0.18),
+                    0 1px 2px rgba(0, 0, 0, 0.35),
+                    inset 0 1px 0 rgba(255, 248, 200, 0.4);
+            }
+            50% {
+                transform: translateX(-50%);
+                box-shadow:
+                    0 0 7px rgba(255, 236, 160, 0.6),
+                    0 0 16px rgba(230, 195, 80, 0.45),
+                    0 0 26px rgba(201, 162, 39, 0.28),
+                    0 1px 2px rgba(0, 0, 0, 0.35),
+                    inset 0 1px 0 rgba(255, 252, 220, 0.55);
+            }
+        }
         .dashboard2-card-new-badge {
             position: absolute;
-            top: 0.35rem;
-            left: 0.45rem;
+            top: 0.36rem;
+            left: 50%;
             z-index: 2;
+            transform: translateX(-50%);
+            pointer-events: none;
+            white-space: nowrap;
             font-size: 0.5rem;
             font-weight: 800;
             letter-spacing: 0.06em;
             text-transform: uppercase;
             color: #2b2305;
-            background: linear-gradient(180deg, #e8d05a 0%, #c9a227 45%, #a8861a 100%);
-            border: 1px solid rgba(60, 48, 8, 0.35);
-            border-radius: 4px;
-            padding: 0.1rem 0.32rem;
+            background: linear-gradient(180deg, #f0e06a 0%, #d4b42e 42%, #b8921c 100%);
+            border: 1px solid rgba(90, 72, 12, 0.4);
+            border-radius: 999px;
+            padding: 0.12rem 0.42rem;
             line-height: 1.2;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+            animation: dashboard2-new-badge-neon 3s ease-in-out infinite;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .dashboard2-card-new-badge {
+                animation: none;
+                box-shadow:
+                    0 0 6px rgba(255, 230, 140, 0.5),
+                    0 0 14px rgba(201, 162, 39, 0.3),
+                    0 1px 2px rgba(0, 0, 0, 0.35),
+                    inset 0 1px 0 rgba(255, 248, 200, 0.4);
+            }
         }
         .dashboard2-card-icon-wrap {
             width: 2rem;

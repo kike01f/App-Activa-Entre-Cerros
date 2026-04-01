@@ -19440,6 +19440,24 @@
             cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
             cell.border = _excelBordeFino();
         }
+        function _excelValorSeguro(v) {
+            if (v === undefined || v === null) return '';
+            if (typeof v === 'number') return Number.isFinite(v) ? v : '';
+            if (typeof v === 'boolean') return v ? 'Si' : 'No';
+            if (v instanceof Date) return Number.isNaN(v.getTime()) ? '' : v;
+            if (typeof v === 'object') {
+                try { return JSON.stringify(v); } catch (_) { return String(v); }
+            }
+            const s = String(v).trim();
+            if (!s) return '';
+            if (/^-?\d+(\.\d+)?$/.test(s)) {
+                if (!(s.length > 1 && s[0] === '0' && s[1] !== '.')) {
+                    const n = Number(s);
+                    if (Number.isFinite(n)) return n;
+                }
+            }
+            return s;
+        }
 
         function _nombreHojaExcelSeguro(nombre) {
             const limpio = String(nombre || '').replace(/[\\/*?:[\]]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -19469,24 +19487,28 @@
 
             for (let c = 1; c <= numCols; c++) {
                 const cell = sheet.getCell(rowIdx, c);
-                cell.value = header[c - 1] || '';
+                cell.value = _excelValorSeguro(header[c - 1] || '');
                 _estilizarEncabezadoColumnaTabla(cell);
             }
             rowIdx++;
 
             dataRows.forEach((row) => {
-                const isTotal = String(row[0] || '').trim().toUpperCase().indexOf('TOTAL') === 0;
-                for (let c = 1; c <= numCols; c++) {
-                    const cell = sheet.getCell(rowIdx, c);
-                    cell.value = row[c - 1] ?? '';
-                    cell.font = { size: _EXCEL_TAM_TEXTO_CELDA, bold: isTotal };
-                    cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
-                    cell.border = _excelBordeFino();
-                    if (isTotal) {
-                        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: _EXCEL_FILA_TOTAL_GRIS } };
+                try {
+                    const isTotal = String(row[0] || '').trim().toUpperCase().indexOf('TOTAL') === 0;
+                    for (let c = 1; c <= numCols; c++) {
+                        const cell = sheet.getCell(rowIdx, c);
+                        cell.value = _excelValorSeguro(row[c - 1] ?? '');
+                        cell.font = { size: _EXCEL_TAM_TEXTO_CELDA, bold: isTotal };
+                        cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+                        cell.border = _excelBordeFino();
+                        if (isTotal) {
+                            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: _EXCEL_FILA_TOTAL_GRIS } };
+                        }
                     }
+                    rowIdx++;
+                } catch (e) {
+                    console.warn('⚠️ Fila omitida por dato inválido en Excel:', e);
                 }
-                rowIdx++;
             });
 
             for (let c = 1; c <= numCols; c++) {

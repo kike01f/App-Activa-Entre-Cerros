@@ -18,6 +18,8 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <!-- SheetJS para leer archivos Excel -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <!-- ExcelJS para generar reportes .xlsx con estilos -->
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <!-- Chart.js y plugin para % en tortas (gráficos del panel) -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
@@ -19417,6 +19419,184 @@
         }
                 
         
+        const _EXCEL_TABLA_ENCABEZADO_VERDE = 'FF70AD47';
+        const _EXCEL_FILA_TOTAL_GRIS = 'FFE8E8E8';
+        const _EXCEL_TAM_TEXTO_CELDA = 14;
+        const _EXCEL_TAM_TITULO_TABLA = 16;
+        const _EXCEL_MODULOS_REPORTE = ['mudanzas', 'tarjetas', 'multas', 'morosos', 'aperturas'];
+
+        function _excelBordeFino() {
+            return {
+                top: { style: 'thin', color: { argb: 'FFB8B8B8' } },
+                left: { style: 'thin', color: { argb: 'FFB8B8B8' } },
+                bottom: { style: 'thin', color: { argb: 'FFB8B8B8' } },
+                right: { style: 'thin', color: { argb: 'FFB8B8B8' } }
+            };
+        }
+
+        function _estilizarEncabezadoColumnaTabla(cell) {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: _EXCEL_TABLA_ENCABEZADO_VERDE } };
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: _EXCEL_TAM_TEXTO_CELDA };
+            cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            cell.border = _excelBordeFino();
+        }
+
+        function _nombreHojaExcelSeguro(nombre) {
+            const limpio = String(nombre || '').replace(/[\\/*?:[\]]/g, ' ').replace(/\s+/g, ' ').trim();
+            return (limpio || 'Hoja').slice(0, 31);
+        }
+
+        function _escribirHojaDesdeAOA(sheet, aoa, opciones = {}) {
+            const filas = Array.isArray(aoa) ? aoa : [];
+            const titulo = (filas[0] && filas[0][0]) || opciones.titulo || sheet.name;
+            const headerIdx = filas.findIndex((fila, idx) => idx > 0 && Array.isArray(fila) && fila.some(v => String(v || '').trim() !== ''));
+            const header = headerIdx >= 0 ? (filas[headerIdx] || []) : [];
+            const dataRows = headerIdx >= 0 ? filas.slice(headerIdx + 1).filter(row => Array.isArray(row) && row.some(v => String(v || '').trim() !== '')) : [];
+            const numCols = Math.max(header.length, ...dataRows.map(r => r.length), 1);
+            sheet.views = [{ showGridLines: false }];
+
+            sheet.mergeCells(1, 1, 1, numCols);
+            const titleCell = sheet.getCell(1, 1);
+            titleCell.value = titulo;
+            titleCell.font = { bold: true, size: _EXCEL_TAM_TITULO_TABLA };
+            titleCell.alignment = { horizontal: 'left', vertical: 'middle' };
+
+            let rowIdx = 3;
+            if (!header.length) {
+                sheet.getCell(rowIdx, 1).value = '(Sin datos)';
+                return;
+            }
+
+            for (let c = 1; c <= numCols; c++) {
+                const cell = sheet.getCell(rowIdx, c);
+                cell.value = header[c - 1] || '';
+                _estilizarEncabezadoColumnaTabla(cell);
+            }
+            rowIdx++;
+
+            dataRows.forEach((row) => {
+                const isTotal = String(row[0] || '').trim().toUpperCase().indexOf('TOTAL') === 0;
+                for (let c = 1; c <= numCols; c++) {
+                    const cell = sheet.getCell(rowIdx, c);
+                    cell.value = row[c - 1] ?? '';
+                    cell.font = { size: _EXCEL_TAM_TEXTO_CELDA, bold: isTotal };
+                    cell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+                    cell.border = _excelBordeFino();
+                    if (isTotal) {
+                        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: _EXCEL_FILA_TOTAL_GRIS } };
+                    }
+                }
+                rowIdx++;
+            });
+
+            for (let c = 1; c <= numCols; c++) {
+                let maxLen = 10;
+                for (let r = 1; r < rowIdx; r++) {
+                    const txt = String(sheet.getCell(r, c).value || '');
+                    maxLen = Math.max(maxLen, txt.length + 2);
+                }
+                sheet.getColumn(c).width = Math.min(maxLen, 52);
+            }
+        }
+
+        function _generarDatosMultasConTotales(multas) {
+            const datos = generarDatosMultas(multas || []);
+            const lista = Array.isArray(multas) ? multas : [];
+            const totalUF = lista.filter(m => String((m && m.tipoUnidad) || 'UF').toUpperCase() === 'UF').reduce((sum, m) => sum + (parseFloat(m && m.monto) || 0), 0);
+            const totalUTM = lista.filter(m => String((m && m.tipoUnidad) || '').toUpperCase() === 'UTM').reduce((sum, m) => sum + (parseFloat(m && m.monto) || 0), 0);
+            datos.push([]);
+            datos.push(['TOTAL MONTO UF', '', '', '', `${totalUF} UF`, '']);
+            datos.push(['TOTAL MONTO UTM', '', '', '', `${totalUTM} UTM`, '']);
+            return datos;
+        }
+
+        function _rellenarPortadaXLSX(sheet, ctx) {
+            sheet.views = [{ showGridLines: false }];
+            sheet.mergeCells('A1:E1');
+            sheet.getCell('A1').value = 'INFORME MENSUAL DE GESTION';
+            sheet.getCell('A1').font = { bold: true, size: _EXCEL_TAM_TITULO_TABLA };
+            sheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
+            sheet.mergeCells('A2:E2');
+            sheet.getCell('A2').value = ctx.nombreComunidad;
+            sheet.getCell('A2').font = { bold: true, size: _EXCEL_TAM_TEXTO_CELDA };
+            sheet.getCell('A2').alignment = { horizontal: 'center', vertical: 'middle' };
+        }
+
+        async function exportarInformeMensualXLSX(opciones = {}) {
+            const mesAnio = resolverMesReporte(opciones.mesAnio || null);
+            const esPrevisualizacion = !!opciones.esPrevisualizacion;
+            const nombreMes = obtenerNombreMes(mesAnio);
+            const personalizacion = await obtenerPersonalizacion().catch(() => ({}));
+            const nombreComunidad = personalizacion.comunidad || localStorage.getItem('nombreComunidad') || 'Comunidad';
+            const jefeEdificio = personalizacion.jefeEdificio || localStorage.getItem('jefeEdificio') || 'No especificado';
+            const numeroDeptos = personalizacion.deptos || localStorage.getItem('numeroDeptos') || 'No especificado';
+
+            let modulosVisibles = await obtenerModulosVisibles().catch(() => []);
+            if (!Array.isArray(modulosVisibles) || !modulosVisibles.length) modulosVisibles = _EXCEL_MODULOS_REPORTE.slice();
+            const ordenModulos = _EXCEL_MODULOS_REPORTE.filter(m => modulosVisibles.includes(m));
+
+            const [mudanzas, tarjetas, multas, morosos, aperturas] = await Promise.all([
+                ordenModulos.includes('mudanzas') ? cargarDatosModulo('mudanzas', mesAnio, esPrevisualizacion) : Promise.resolve([]),
+                ordenModulos.includes('tarjetas') ? cargarDatosModulo('tarjetas', mesAnio, esPrevisualizacion) : Promise.resolve([]),
+                ordenModulos.includes('multas') ? cargarDatosModulo('multas', mesAnio, esPrevisualizacion) : Promise.resolve([]),
+                ordenModulos.includes('morosos') ? cargarDatosModulo('morosos', mesAnio, esPrevisualizacion) : Promise.resolve([]),
+                ordenModulos.includes('aperturas') ? cargarDatosModulo('aperturas', mesAnio, esPrevisualizacion) : Promise.resolve([])
+            ]);
+
+            const wb = new ExcelJS.Workbook();
+            wb.creator = 'Gestion Comunidad';
+            wb.created = new Date();
+
+            const portada = wb.addWorksheet('Portada');
+            _rellenarPortadaXLSX(portada, { nombreComunidad, jefeEdificio, numeroDeptos, nombreMes });
+
+            const hojas = [
+                { key: 'mudanzas', nombre: 'Mudanzas', datos: generarDatosMudanzas(mudanzas || []) },
+                { key: 'tarjetas', nombre: 'Tarjetas TAG', datos: generarDatosTarjetas(tarjetas || []) },
+                { key: 'multas', nombre: 'Multas', datos: _generarDatosMultasConTotales(multas || []) },
+                { key: 'morosos', nombre: 'Morosos', datos: generarDatosMorosos(morosos || []) },
+                { key: 'aperturas', nombre: 'Aperturas', datos: generarDatosAperturas(aperturas || []) }
+            ];
+            hojas.forEach((h) => {
+                if (!ordenModulos.includes(h.key)) return;
+                const ws = wb.addWorksheet(_nombreHojaExcelSeguro(h.nombre));
+                _escribirHojaDesdeAOA(ws, h.datos, { titulo: h.nombre });
+            });
+
+            const buffer = await wb.xlsx.writeBuffer();
+            const nombreArchivo = `Informe_Mensual_${nombreMes.replace(/\s+/g, '_').replace(/[^\w\-]/g, '')}.xlsx`;
+            if (opciones.descargar !== false) {
+                const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = nombreArchivo;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+            }
+            return { nombreArchivo, buffer };
+        }
+
+        // Sobrescribe la versión HTML antigua y mantiene compatibilidad con botones existentes.
+        async function generarReporteExcel(mesAnio, nombreMes, esPrevisualizacion = false) {
+            mostrarProgreso('Generando reporte Excel...');
+            try {
+                await exportarInformeMensualXLSX({
+                    mesAnio: mesAnio || null,
+                    esPrevisualizacion,
+                    descargar: true
+                });
+                ocultarProgreso();
+                mostrarAlerta('Archivo Excel descargado correctamente.', 'Éxito');
+            } catch (error) {
+                console.error('❌ Error crítico al generar reporte Excel:', error);
+                ocultarProgreso();
+                mostrarAlerta(`Error al generar el reporte Excel: ${error.message || 'Error desconocido'}.`, 'Error');
+            }
+        }
+
         // Funciones auxiliares para generar datos en formato array de arrays para SheetJS
         function generarDatosResumen(nombreComunidad, jefeEdificio, numeroDeptos, nombreMes, mudanzas, aperturas, tarjetas, espacios, multas, morosos, modulosVisibles) {
             const datos = [];

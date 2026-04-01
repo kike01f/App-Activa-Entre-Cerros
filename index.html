@@ -1346,6 +1346,47 @@
         .dashboard2-mes-texto { margin: 0.15rem 0 0 0; font-size: 0.8rem; opacity: 0.9; }
         #dashboard .dashboard2-banner .arturito-dashboard { width: 52px; height: 52px; flex-shrink: 0; }
         #dashboard .dashboard2-banner .arturito-dashboard svg { width: 100%; height: 100%; }
+        /* Sirena en la mascota del banner cuando hay alertas urgentes/importantes */
+        .arturito-sirena {
+            position: absolute;
+            top: -3px;
+            right: -5px;
+            width: 1.15rem;
+            height: 1.15rem;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #f87171 0%, #dc2626 45%, #991b1b 100%);
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 2px 10px rgba(220, 38, 38, 0.65);
+            align-items: center;
+            justify-content: center;
+            font-size: 0.62rem;
+            line-height: 1;
+            z-index: 12;
+            pointer-events: none;
+        }
+        .arturito-sirena:not([hidden]) {
+            display: flex;
+        }
+        .arturito-sirena.arturito-sirena-pulso {
+            animation: arturitoSirenaPulso 1.35s ease-in-out infinite;
+        }
+        .arturito-sirena.arturito-sirena-nuevo {
+            animation: arturitoSirenaNuevo 0.65s ease-out 3;
+        }
+        @keyframes arturitoSirenaPulso {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.14); opacity: 0.92; }
+        }
+        @keyframes arturitoSirenaNuevo {
+            0% { transform: scale(0.4); filter: brightness(1.4); }
+            45% { transform: scale(1.3); filter: brightness(1); }
+            100% { transform: scale(1); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .arturito-sirena.arturito-sirena-pulso,
+            .arturito-sirena.arturito-sirena-nuevo {
+                animation: none;
+            }
+        }
         .dashboard2-btn-link { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.9rem; background: rgba(255,255,255,0.2); color: #fff; border-radius: var(--radius); font-size: 0.8rem; font-weight: 600; text-decoration: none; }
         .dashboard2-btn-link:hover { background: rgba(255,255,255,0.3); color: #fff; }
         .dashboard2-body { max-width: 1200px; margin: 0 auto; padding: 0.75rem 1rem 1.25rem; }
@@ -3520,6 +3561,7 @@
                     <div class="dashboard2-banner-top">
                         <div class="dashboard2-banner-titulo-wrap" style="display: flex; align-items: center; gap: 0.75rem;">
                             <div class="arturito-dashboard" id="arturitoDashboard" title="¡Hola! Soy Arturito, tu asistente" style="flex-shrink: 0;">
+                                <div class="arturito-sirena" id="arturitoSirena" hidden title="Alertas urgentes o importantes en Arturito"><span class="arturito-sirena-icon" aria-hidden="true">🚨</span></div>
                                 <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
                                     <rect x="16" y="28" width="32" height="28" rx="6" fill="#7FBA02"/>
                                     <rect x="18" y="30" width="28" height="24" rx="4" fill="#8FCB1A"/>
@@ -23691,6 +23733,37 @@
             window._cintaReganoInterval = setInterval(actualizarTexto, 60000);
         }
         
+        let arturitoAlertasFingerprint = '';
+        function huellaAlertasArturito(recordatorios) {
+            if (!recordatorios || !recordatorios.length) return '';
+            return recordatorios
+                .filter(r => r.tipo === 'urgente' || r.tipo === 'importante')
+                .map(r => (r.id || '') + '|' + String(r.mensaje || '').slice(0, 120) + '|' + (r.tipo || ''))
+                .sort()
+                .join(';;');
+        }
+        function actualizarSirenaArturito(recordatorios) {
+            const sirena = document.getElementById('arturitoSirena');
+            if (!sirena) return;
+            const fp = huellaAlertasArturito(recordatorios);
+            if (!fp) {
+                sirena.hidden = true;
+                sirena.classList.remove('arturito-sirena-pulso', 'arturito-sirena-nuevo');
+                arturitoAlertasFingerprint = '';
+                return;
+            }
+            const huboCambio = arturitoAlertasFingerprint !== '' && fp !== arturitoAlertasFingerprint;
+            arturitoAlertasFingerprint = fp;
+            sirena.hidden = false;
+            sirena.classList.add('arturito-sirena-pulso');
+            if (huboCambio) {
+                sirena.classList.remove('arturito-sirena-nuevo');
+                void sirena.offsetWidth;
+                sirena.classList.add('arturito-sirena-nuevo');
+                setTimeout(() => sirena.classList.remove('arturito-sirena-nuevo'), 2200);
+            }
+        }
+
         // Función para generar el HTML de Arturito
         function generarHTMLArturito(contenedor, saludo, emoji, consejos, recordatorios) {
             // Ordenar recordatorios por prioridad (urgente primero; mensaje inicio de mes al frente dentro de su grupo)
@@ -23777,6 +23850,7 @@
             `;
             
             contenedor.innerHTML = html;
+            actualizarSirenaArturito(recordatorios);
         }
         
         // Función para expandir/colapsar mensajes de Arturito (disponible globalmente)

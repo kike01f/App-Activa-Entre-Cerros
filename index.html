@@ -5304,7 +5304,7 @@
                         <ul style="margin-left: 1.5rem; margin-bottom: 1rem;">
                             <li><strong>Editar / Marcar vacía o ocupada / Eliminar:</strong> Desde la tabla de unidades</li>
                             <li><strong>Resumen:</strong> Total unidades, ocupadas, vacías y porcentaje de ocupación</li>
-                            <li><strong>Persistencia:</strong> La ocupación no se archiva al cerrar el mes; el listado y el mapa muestran siempre el estado actual (también puede editarse al consultar meses archivados)</li>
+                            <li><strong>Persistencia:</strong> La ocupación no se archiva al cerrar el mes; el listado y el mapa muestran siempre el estado actual (también puede editarse al consultar meses archivados). Si el registro persistente está vacío, la app intenta copiar automáticamente las unidades guardadas en marzo (año actual y años anteriores recientes) desde Firestore o respaldo local.</li>
                         </ul>
                         <p style="margin-bottom: 0.5rem;"><strong>En el reporte de fin de mes:</strong></p>
                         <ul style="margin-left: 1.5rem;">
@@ -6392,12 +6392,20 @@
             auth.onAuthStateChanged(function(user) {
                 if (user) {
                     showApp();
+                    if (typeof asegurarOcupacionPersistenteDesdeMarzo === 'function') {
+                        asegurarOcupacionPersistenteDesdeMarzo().catch(function() {});
+                    }
                 } else {
                     showLogin();
                 }
             });
         } else {
             showApp();
+            setTimeout(function() {
+                if (typeof asegurarOcupacionPersistenteDesdeMarzo === 'function') {
+                    asegurarOcupacionPersistenteDesdeMarzo().catch(function() {});
+                }
+            }, 0);
         }
 
         document.getElementById('loginForm') && document.getElementById('loginForm').addEventListener('submit', async function(e) {
@@ -7579,6 +7587,61 @@
         
         // Ocupación: un solo documento persistente (no se archiva con el cierre de mes)
         const OCUPACION_DOC_ID = 'ocupacion-residentes';
+
+        async function obtenerOcupacionSoloDocumentoGlobal() {
+            if (firebaseInitialized && db) {
+                try {
+                    const doc = await db.collection('comunidad').doc(OCUPACION_DOC_ID).get();
+                    if (doc.exists) {
+                        const data = doc.data();
+                        const r = Array.isArray(data.datos) ? data.datos : [];
+                        if (r.length > 0) return r;
+                    }
+                } catch (e) {
+                    console.error('Error al leer ocupación solo global (Firestore):', e);
+                }
+            }
+            try {
+                const raw = localStorage.getItem(OCUPACION_DOC_ID);
+                if (raw) {
+                    const p = JSON.parse(raw);
+                    if (Array.isArray(p) && p.length > 0) return p;
+                }
+            } catch (e) {
+                console.error('Error al leer ocupación solo global (LocalStorage):', e);
+            }
+            return [];
+        }
+
+        /** Si el documento persistente está vacío, copia unidades desde marzo (YYYY-03 del año en curso y años anteriores recientes). */
+        async function asegurarOcupacionPersistenteDesdeMarzo() {
+            if (window.__promMigracionOcupacionMarzo) return window.__promMigracionOcupacionMarzo;
+            window.__promMigracionOcupacionMarzo = (async () => {
+                try {
+                    const actuales = await obtenerOcupacionSoloDocumentoGlobal();
+                    if (actuales.length > 0) return;
+                    const mesActual = obtenerMesActual();
+                    const partes = mesActual.split('-');
+                    const yr = parseInt(partes[0], 10);
+                    if (isNaN(yr)) return;
+                    const candidatos = [`${yr}-03`, `${yr - 1}-03`, `${yr - 2}-03`];
+                    const vistos = new Set();
+                    for (const mesMarzo of candidatos) {
+                        if (vistos.has(mesMarzo)) continue;
+                        vistos.add(mesMarzo);
+                        const datos = await obtenerDatosMesEspecifico('ocupacion-residentes', mesMarzo);
+                        if (datos && datos.length > 0) {
+                            await guardarDatosMes('ocupacion-residentes', datos);
+                            console.log(`✓ Ocupación: ${datos.length} unidad(es) importadas desde ${mesMarzo} al registro persistente.`);
+                            return;
+                        }
+                    }
+                } catch (err) {
+                    console.error('Migración ocupación desde marzo:', err);
+                }
+            })();
+            return window.__promMigracionOcupacionMarzo;
+        }
 
         // Función para obtener datos del mes actual o del mes en consulta
         async function obtenerDatosMes(key) {
@@ -10411,6 +10474,9 @@
 
         async function cargarOcupacionResidentes() {
             toggleCampoArrendatarioOcupacion();
+            if (typeof asegurarOcupacionPersistenteDesdeMarzo === 'function') {
+                await asegurarOcupacionPersistenteDesdeMarzo();
+            }
             const unidades = await obtenerDatosMes('ocupacion-residentes');
             const tbody = document.getElementById('tbodyOcupacionResidentes');
             if (!tbody) return;
@@ -10424,7 +10490,7 @@
                 return;
             }
             unidades.sort((a, b) => String(a.numero || '').localeCompare(String(b.numero || ''), undefined, { numeric: true }));
-            const soloLectura = window.mesEnConsulta && !window.mesReabierto;
+            const soloLectura = false;
             tbody.innerHTML = unidades.map(u => {
                 const tipoUso = u.tipoUso || (u.tipoResidente === 'arrendatario' ? 'arriendo' : 'habitacional');
                 const tipoBadge = tipoUso === 'arriendo'
@@ -10480,10 +10546,6 @@
         }
 
         async function borrarUnidadesOcupacionSeleccionadas() {
-            if (window.mesEnConsulta && !window.mesReabierto) {
-                mostrarAlerta('No se pueden eliminar unidades en meses archivados.', 'Registro Archivado');
-                return;
-            }
             const ids = Array.from(document.querySelectorAll('.ocupacion-row-cb:checked')).map(cb => cb.getAttribute('data-id')).filter(Boolean);
             if (ids.length === 0) {
                 mostrarAlerta('Seleccione al menos una unidad para borrar.', 'Sin selección');
@@ -10508,10 +10570,6 @@
 
         async function registrarOcupacionResidentes(event) {
             if (event) event.preventDefault();
-            if (window.mesEnConsulta && !window.mesReabierto) {
-                mostrarAlerta('No se puede agregar en meses archivados. Vuelva al mes actual o reabra el mes.', 'Registro Archivado');
-                return;
-            }
             const numero = (document.getElementById('ocupacionNumero').value || '').trim();
             const propietario = (document.getElementById('ocupacionPropietario').value || '').trim();
             if (!numero || !propietario) {
@@ -10561,7 +10619,6 @@
         }
 
         async function editarUnidadOcupacion(id) {
-            if (window.mesEnConsulta && !window.mesReabierto) return;
             const unidades = await obtenerDatosMes('ocupacion-residentes');
             const u = (unidades || []).find(x => x.id === id);
             if (!u) return;
@@ -10590,7 +10647,6 @@
         }
 
         async function toggleOcupadaUnidad(id) {
-            if (window.mesEnConsulta && !window.mesReabierto) return;
             const unidades = await obtenerDatosMes('ocupacion-residentes');
             const u = (unidades || []).find(x => x.id === id);
             if (!u) return;
@@ -10599,7 +10655,6 @@
         }
 
         async function eliminarUnidadOcupacion(id) {
-            if (window.mesEnConsulta && !window.mesReabierto) return;
             const confirmado = await confirmarAccion('¿Eliminar esta unidad del registro?', 'Eliminar unidad');
             if (!confirmado) return;
             const todas = await obtenerDatosMes('ocupacion-residentes');
@@ -21462,6 +21517,9 @@
             }
             var prom = (async function runCargarEstadisticas() {
             const modulosVisibles = await obtenerModulosVisibles();
+            if (modulosVisibles.includes('ocupacion-residentes') && typeof asegurarOcupacionPersistenteDesdeMarzo === 'function') {
+                await asegurarOcupacionPersistenteDesdeMarzo();
+            }
             
             // Cargar solo datos de módulos visibles en paralelo
             const promesas = [];

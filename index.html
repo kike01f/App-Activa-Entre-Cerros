@@ -7030,9 +7030,18 @@
         // ============================================
         // --- Firebase: solo Entre Cerros ---
         // Proyecto: activa-entre-cerros (no usar credenciales de gestion-wm).
-        // gestion-wm.html usa proyecto distinto: administracion-41391 → bases de datos ya separadas a nivel de proyecto.
+        // gestion-wm usa Firestore administracion-41391; aquí los datos en nube ya van a otro proyecto.
+        // Además, localStorage del navegador es por origen (mismo localhost): sin prefijo, WM y EC compartían claves;
+        // lsKey() aísla el caché/respaldo local de esta app.
         // Colección raíz de documentos en ESTE proyecto (cambie a p. ej. "comunidad_entre_cerros" solo si migra datos en consola):
         const FIRESTORE_COLLECTION_COMUNIDAD = 'comunidad';
+        /**
+         * Prefijo para localStorage: gestion-wm y esta página suelen abrirse desde el mismo origen (mismo localhost/puerto).
+         * Sin prefijo, el navegador mezcla el respaldo local entre apps aunque Firestore sea otro proyecto.
+         */
+        function lsKey(storageKey) {
+            return 'ec_gestion_v1:' + String(storageKey);
+        }
         const firebaseConfig = {
             apiKey: "AIzaSyCbHnFHAxrmEyb9IL0m62NAod9kGKqWG3k",
             authDomain: "activa-entre-cerros.firebaseapp.com",
@@ -7272,7 +7281,7 @@
             const key = 'notif_local';
             let arr = [];
             try {
-                arr = JSON.parse(localStorage.getItem(key) || '[]');
+                arr = JSON.parse(localStorage.getItem(lsKey(key)) || '[]');
             } catch (e) { return; }
             if (arr.length === 0 || !firebaseInitialized || !db) return;
             const col = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc('notificaciones').collection('movimientos');
@@ -7287,7 +7296,7 @@
                     });
                 } catch (e) { break; }
             }
-            try { localStorage.setItem(key, '[]'); } catch (e) {}
+            try { localStorage.setItem(lsKey(key), '[]'); } catch (e) {}
         }
 
         async function registrarMovimiento(tipo, modulo, detalle) {
@@ -7314,10 +7323,10 @@
             if (!guardadoEnNube) {
                 try {
                     const key = 'notif_local';
-                    let arr = JSON.parse(localStorage.getItem(key) || '[]');
+                    let arr = JSON.parse(localStorage.getItem(lsKey(key)) || '[]');
                     arr.unshift({ tipo: item.tipo, modulo: item.modulo, detalle: item.detalle, fecha: ahora.toISOString() });
                     arr = arr.slice(0, NOTIF_LIMIT);
-                    localStorage.setItem(key, JSON.stringify(arr));
+                    localStorage.setItem(lsKey(key), JSON.stringify(arr));
                 } catch (e2) {}
             }
             await actualizarBadgeNotif();
@@ -7336,7 +7345,7 @@
             }
             if (ultimaVista === null) {
                 try {
-                    const s = localStorage.getItem('notif_ultima_vista');
+                    const s = localStorage.getItem(lsKey('notif_ultima_vista'));
                     if (s) ultimaVista = new Date(s);
                 } catch (e) {}
             }
@@ -7357,14 +7366,14 @@
                     });
                 } catch (e) {
                     try {
-                        const arr = JSON.parse(localStorage.getItem('notif_local') || '[]');
+                        const arr = JSON.parse(localStorage.getItem(lsKey('notif_local')) || '[]');
                         const uv = ultimaVista ? ultimaVista.getTime() : 0;
                         arr.forEach(x => { if (new Date(x.fecha).getTime() > uv) count++; });
                     } catch (e2) {}
                 }
             } else {
                 try {
-                    const arr = JSON.parse(localStorage.getItem('notif_local') || '[]');
+                    const arr = JSON.parse(localStorage.getItem(lsKey('notif_local')) || '[]');
                     const uv = ultimaVista ? ultimaVista.getTime() : 0;
                     arr.forEach(x => { if (new Date(x.fecha).getTime() > uv) count++; });
                 } catch (e) {}
@@ -7388,7 +7397,7 @@
                 } catch (e) {}
             }
             try {
-                localStorage.setItem('notif_ultima_vista', ahora.toISOString());
+                localStorage.setItem(lsKey('notif_ultima_vista'), ahora.toISOString());
             } catch (e) {}
             await actualizarBadgeNotif();
         }
@@ -7407,7 +7416,7 @@
             if (!listEl) return;
             var items = [];
             try {
-                var arr = JSON.parse(localStorage.getItem('notif_local') || '[]');
+                var arr = JSON.parse(localStorage.getItem(lsKey('notif_local')) || '[]');
                 items = arr.map(function(x, i) { return { id: 'local_' + i, tipo: x.tipo, modulo: x.modulo, detalle: x.detalle, fecha: parsearFechaNotif(x.fecha) }; });
             } catch (e) {}
             if (firebaseInitialized && db) {
@@ -7422,7 +7431,7 @@
                     console.warn('Notificaciones: no se pudo cargar desde la nube. Mostrando respaldo local.', e?.code || '', e?.message || e);
                     if (items.length === 0) {
                         try {
-                            var arr2 = JSON.parse(localStorage.getItem('notif_local') || '[]');
+                            var arr2 = JSON.parse(localStorage.getItem(lsKey('notif_local')) || '[]');
                             items = arr2.map(function(x, i) { return { id: 'local_' + i, tipo: x.tipo, modulo: x.modulo, detalle: x.detalle, fecha: parsearFechaNotif(x.fecha) }; });
                         } catch (e2) {}
                     }
@@ -7466,10 +7475,10 @@
         async function eliminarNotificacion(id) {
             if (id.startsWith('local_')) {
                 const index = parseInt(id.replace('local_', ''), 10);
-                const arr = JSON.parse(localStorage.getItem('notif_local') || '[]');
+                const arr = JSON.parse(localStorage.getItem(lsKey('notif_local')) || '[]');
                 if (index >= 0 && index < arr.length) {
                     arr.splice(index, 1);
-                    localStorage.setItem('notif_local', JSON.stringify(arr));
+                    localStorage.setItem(lsKey('notif_local'), JSON.stringify(arr));
                 }
             } else if (firebaseInitialized && db) {
                 try {
@@ -7493,8 +7502,8 @@
                 } catch (e) { console.warn('Error al borrar notificaciones:', e); }
             }
             try {
-                localStorage.setItem('notif_local', '[]');
-                localStorage.setItem('notif_ultima_vista', new Date().toISOString());
+                localStorage.setItem(lsKey('notif_local'), '[]');
+                localStorage.setItem(lsKey('notif_ultima_vista'), new Date().toISOString());
             } catch (e) {}
             if (firebaseInitialized && db) {
                 try {
@@ -7969,7 +7978,7 @@
             
             // Respaldo: LocalStorage
             try {
-                const datos = localStorage.getItem(key);
+                const datos = localStorage.getItem(lsKey(key));
                 if (datos) {
                     const parsed = JSON.parse(datos);
                     if (Array.isArray(parsed)) return parsed;
@@ -8002,7 +8011,7 @@
             }
             
             // Respaldo: LocalStorage
-            localStorage.setItem(key, JSON.stringify(datos));
+            localStorage.setItem(lsKey(key), JSON.stringify(datos));
         }
 
         // Funciones para personalización de la app
@@ -8036,7 +8045,7 @@
             
             // Respaldo: LocalStorage
             try {
-                const datos = localStorage.getItem(key);
+                const datos = localStorage.getItem(lsKey(key));
                 if (datos) {
                     const parsed = JSON.parse(datos);
                     personalizacion = {
@@ -8073,7 +8082,7 @@
             }
             
             // Respaldo: LocalStorage
-            localStorage.setItem(key, JSON.stringify(datos));
+            localStorage.setItem(lsKey(key), JSON.stringify(datos));
         }
 
         // Función para cargar datos de personalización en el formulario
@@ -8322,7 +8331,7 @@
                 }
             }
             try {
-                const raw = localStorage.getItem(OCUPACION_DOC_ID);
+                const raw = localStorage.getItem(lsKey(OCUPACION_DOC_ID));
                 if (raw) {
                     const p = JSON.parse(raw);
                     if (Array.isArray(p) && p.length > 0) return p;
@@ -8380,7 +8389,7 @@
                     }
                 }
                 try {
-                    const datos = localStorage.getItem(OCUPACION_DOC_ID);
+                    const datos = localStorage.getItem(lsKey(OCUPACION_DOC_ID));
                     if (datos) {
                         const parsed = JSON.parse(datos);
                         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -8404,7 +8413,7 @@
                         } catch (e) { /* continuar */ }
                     }
                     try {
-                        const datosLS = localStorage.getItem(lk);
+                        const datosLS = localStorage.getItem(lsKey(lk));
                         if (datosLS) {
                             const parsed = JSON.parse(datosLS);
                             if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -8464,7 +8473,7 @@
             // Respaldo: LocalStorage - primero intentar datos activos si hay mes en consulta
             if (mesConsulta !== mesActual) {
                 try {
-                    const datosActivos = localStorage.getItem(`${key}_${mesConsulta}`);
+                    const datosActivos = localStorage.getItem(lsKey(`${key}_${mesConsulta}`));
                     if (datosActivos) {
                         const parsed = JSON.parse(datosActivos);
                         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -8478,7 +8487,7 @@
             
             // Si no hay datos activos, buscar archivados o del mes actual
             try {
-                const datos = localStorage.getItem(docKey);
+                const datos = localStorage.getItem(lsKey(docKey));
                 if (datos) {
                     const parsed = JSON.parse(datos);
                     return Array.isArray(parsed) ? parsed : [];
@@ -8532,7 +8541,7 @@
                 
                 // Respaldo: LocalStorage
                 try {
-                    const datosLS = localStorage.getItem(docKey);
+                    const datosLS = localStorage.getItem(lsKey(docKey));
                     if (datosLS && datosLS !== '[]' && datosLS !== 'null') {
                         const parsed = JSON.parse(datosLS);
                         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -8576,7 +8585,7 @@
             
             // Respaldo: LocalStorage
             try {
-                const datos = localStorage.getItem(archivoKey);
+                const datos = localStorage.getItem(lsKey(archivoKey));
                 if (datos) {
                     const parsed = JSON.parse(datos);
                     if (Array.isArray(parsed)) {
@@ -8627,7 +8636,7 @@
             }
             
             // Respaldo: LocalStorage
-            localStorage.setItem(docKey, JSON.stringify(datos));
+            localStorage.setItem(lsKey(docKey), JSON.stringify(datos));
 
             // Actualizar Panel de Control en tiempo real (sin bloquear el guardado)
             if (typeof window.cargarEstadisticasDashboard === 'function') {
@@ -8660,7 +8669,7 @@
             }
             
             // Respaldo: LocalStorage
-            localStorage.setItem(estadoKey, JSON.stringify(estado));
+            localStorage.setItem(lsKey(estadoKey), JSON.stringify(estado));
         }
 
         // Función para verificar si el pedido está cerrado
@@ -8683,7 +8692,7 @@
             
             // Respaldo: LocalStorage
             try {
-                const estado = localStorage.getItem(estadoKey);
+                const estado = localStorage.getItem(lsKey(estadoKey));
                 if (estado) {
                     const parsed = JSON.parse(estado);
                     return parsed.cerrado === true;
@@ -8713,7 +8722,7 @@
             }
             
             if (!ultimoMes) {
-                ultimoMes = localStorage.getItem('ultimoMesProcesado');
+                ultimoMes = localStorage.getItem(lsKey('ultimoMesProcesado'));
             }
             
             if (ultimoMes !== mesActual) {
@@ -8753,10 +8762,10 @@
                         }
                         
                         // Respaldo: LocalStorage
-                        const datosLS = localStorage.getItem(docKey);
+                        const datosLS = localStorage.getItem(lsKey(docKey));
                         if (datosLS) {
-                            localStorage.setItem(archivoKey, datosLS);
-                            localStorage.removeItem(docKey);
+                            localStorage.setItem(lsKey(archivoKey), datosLS);
+                            localStorage.removeItem(lsKey(docKey));
                         }
                     }
                 }
@@ -8772,7 +8781,7 @@
                         console.error('Error al guardar config en Firestore:', error);
                     }
                 }
-                localStorage.setItem('ultimoMesProcesado', mesActual);
+                localStorage.setItem(lsKey('ultimoMesProcesado'), mesActual);
             }
         }
 
@@ -9926,7 +9935,7 @@
                 const idx = multas.findIndex(m => m.id === id);
                 if (idx !== -1) { multas[idx] = { ...multas[idx], folio: multa.folio }; await guardarDatosMes('multas', multas); }
             }
-            const nombreComunidad = typeof obtenerNombreComunidad === 'function' ? await obtenerNombreComunidad() : (localStorage.getItem('nombreComunidad') || 'Comunidad');
+            const nombreComunidad = typeof obtenerNombreComunidad === 'function' ? await obtenerNombreComunidad() : (localStorage.getItem(lsKey('nombreComunidad')) || 'Comunidad');
             const html = generarComprobanteMultaHtml(multa, nombreComunidad);
             const win = window.open('', '_blank');
             win.document.write(html);
@@ -10634,11 +10643,11 @@
                     const doc = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(key).get();
                     if (doc.exists && doc.data().listas === true) {
                         // Sincronizar con localStorage para acceso rápido
-                        localStorage.setItem(key, 'true');
+                        localStorage.setItem(lsKey(key), 'true');
                         return true;
                     } else if (doc.exists === false) {
                         // Si el documento no existe en Firestore, eliminar de localStorage para mantener consistencia
-                        localStorage.removeItem(key);
+                        localStorage.removeItem(lsKey(key));
                         return false;
                     }
                 } catch (error) {
@@ -10648,7 +10657,7 @@
             }
             
             // Fallback a localStorage
-            const estado = localStorage.getItem(key);
+            const estado = localStorage.getItem(lsKey(key));
             return estado === 'true';
         }
         
@@ -10682,7 +10691,7 @@
                 }
                 
                 // Guardar también en localStorage para acceso rápido
-                localStorage.setItem(key, 'true');
+                localStorage.setItem(lsKey(key), 'true');
                 console.log('✅ Estado guardado en localStorage');
                 
                 // Pequeña pausa para asegurar que los cambios se propaguen
@@ -10692,7 +10701,7 @@
                 const estadoVerificado = await verificarLecturasAguaListas(mesDestino);
                 if (!estadoVerificado) {
                     console.warn('⚠️ El estado no se guardó correctamente. Reintentando...');
-                    localStorage.setItem(key, 'true');
+                    localStorage.setItem(lsKey(key), 'true');
                     if (firebaseInitialized && db) {
                         try {
                             await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(key).set({
@@ -10738,7 +10747,7 @@
                 }
                 
                 // Eliminar de localStorage
-                localStorage.removeItem(key);
+                localStorage.removeItem(lsKey(key));
                 console.log('✅ Estado eliminado de localStorage');
                 
                 // Pequeña pausa para asegurar que los cambios se propaguen
@@ -10749,7 +10758,7 @@
                 if (estadoVerificado) {
                     console.warn('⚠️ El estado aún está marcado como listas después de reabrir. Forzando actualización...');
                     // Forzar eliminación nuevamente
-                    localStorage.removeItem(key);
+                    localStorage.removeItem(lsKey(key));
                     if (firebaseInitialized && db) {
                         try {
                             await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(key).delete();
@@ -11507,7 +11516,7 @@
                         return doc.data().productos || [];
                     }
                 }
-                const datos = localStorage.getItem('inventario-productos');
+                const datos = localStorage.getItem(lsKey('inventario-productos'));
                 return datos ? JSON.parse(datos) : [];
             } catch (error) {
                 console.error('Error al obtener inventario:', error);
@@ -11527,7 +11536,7 @@
                         actualizado: firebase.firestore.FieldValue.serverTimestamp()
                     });
                 }
-                localStorage.setItem('inventario-productos', JSON.stringify(productos));
+                localStorage.setItem(lsKey('inventario-productos'), JSON.stringify(productos));
             } catch (error) {
                 console.error('Error al guardar inventario:', error);
             }
@@ -12036,7 +12045,7 @@
                     
                     // Si aún no se encontró, buscar en LocalStorage
                     if (!pedidoAnterior || pedidoAnterior.length === 0) {
-                        const datosLS = localStorage.getItem(`insumos_${mesAnteriorStr}`);
+                        const datosLS = localStorage.getItem(lsKey(`insumos_${mesAnteriorStr}`));
                         if (datosLS && datosLS !== '[]' && datosLS !== 'null') {
                             try {
                                 const parsed = JSON.parse(datosLS);
@@ -12845,7 +12854,7 @@
             const proveedoresFuente = await obtenerDatos('proveedores');
             let proveedores = Array.isArray(proveedoresFuente) ? [...proveedoresFuente] : [];
             try {
-                const ls = JSON.parse(localStorage.getItem('proveedores') || '[]');
+                const ls = JSON.parse(localStorage.getItem(lsKey('proveedores')) || '[]');
                 if (Array.isArray(ls) && ls.length > 0) {
                     proveedores = [...proveedores, ...ls];
                 }
@@ -15992,7 +16001,7 @@
                 // Respaldo: LocalStorage
                 if (!modulosVisibles) {
                     try {
-                        const datos = localStorage.getItem('config-modulos');
+                        const datos = localStorage.getItem(lsKey('config-modulos'));
                         if (datos) {
                             const parsed = JSON.parse(datos);
                             if (parsed.modulosVisibles && Array.isArray(parsed.modulosVisibles)) {
@@ -16088,7 +16097,7 @@
                 }
                 
                 // Respaldo: LocalStorage
-                localStorage.setItem('config-modulos', JSON.stringify(configData));
+                localStorage.setItem(lsKey('config-modulos'), JSON.stringify(configData));
             } catch (error) {
                 console.error('Error al guardar módulos visibles:', error);
             }
@@ -17087,7 +17096,7 @@
                         if (mesReabierto !== mesActual && !mesesArchivados.has(mesReabierto)) {
                             // Verificar si hay datos (no está vacío)
                             try {
-                                const datos = localStorage.getItem(key);
+                                const datos = localStorage.getItem(lsKey(key));
                                 if (datos && datos !== '[]' && datos !== 'null') {
                                     mesesReabiertos.add(mesReabierto);
                                 }
@@ -17166,8 +17175,8 @@
                     
                     // Eliminar de LocalStorage
                     try {
-                        if (localStorage.getItem(archivoKey)) {
-                            localStorage.removeItem(archivoKey);
+                        if (localStorage.getItem(lsKey(archivoKey))) {
+                            localStorage.removeItem(lsKey(archivoKey));
                             eliminados++;
                         }
                     } catch (error) {
@@ -17253,7 +17262,7 @@
                 // Si no se encontró en Firestore, verificar en LocalStorage
                 if (!tieneDatosActivos) {
                     tieneDatosActivos = modulos.some(modulo => {
-                        const datosActivos = localStorage.getItem(`${modulo}_${mesSeleccionado}`);
+                        const datosActivos = localStorage.getItem(lsKey(`${modulo}_${mesSeleccionado}`));
                         return datosActivos && datosActivos !== '[]' && datosActivos !== 'null';
                     });
                 }
@@ -17714,9 +17723,9 @@
                 } catch (error) {
                     console.warn('⚠️ Error al obtener personalización, usando valores por defecto:', error);
                     // Fallback a localStorage si existe
-                    nombreComunidad = localStorage.getItem('nombreComunidad') || nombreComunidad;
-                    jefeEdificio = localStorage.getItem('jefeEdificio') || jefeEdificio;
-                    numeroDeptos = localStorage.getItem('numeroDeptos') || numeroDeptos;
+                    nombreComunidad = localStorage.getItem(lsKey('nombreComunidad')) || nombreComunidad;
+                    jefeEdificio = localStorage.getItem(lsKey('jefeEdificio')) || jefeEdificio;
+                    numeroDeptos = localStorage.getItem(lsKey('numeroDeptos')) || numeroDeptos;
                 }
                 
                 console.log('✅ Datos de encabezado:', { nombreComunidad, jefeEdificio, numeroDeptos });
@@ -18886,15 +18895,15 @@
                     numeroDeptos = personalizacion.deptos || numeroDeptos;
                 } catch (error) {
                     console.warn('⚠️ Error al obtener personalización, usando valores por defecto:', error);
-                    nombreComunidad = localStorage.getItem('nombreComunidad') || nombreComunidad;
-                    jefeEdificio = localStorage.getItem('jefeEdificio') || jefeEdificio;
-                    numeroDeptos = localStorage.getItem('numeroDeptos') || numeroDeptos;
+                    nombreComunidad = localStorage.getItem(lsKey('nombreComunidad')) || nombreComunidad;
+                    jefeEdificio = localStorage.getItem(lsKey('jefeEdificio')) || jefeEdificio;
+                    numeroDeptos = localStorage.getItem(lsKey('numeroDeptos')) || numeroDeptos;
                 }
                 
                 // Obtener módulos visibles
                 let modulosVisibles = [];
                 try {
-                    const modulosStr = localStorage.getItem('modulosVisibles') || '["mudanzas","aperturas","tarjetas","espacios","multas","morosos"]';
+                    const modulosStr = localStorage.getItem(lsKey('modulosVisibles')) || '["mudanzas","aperturas","tarjetas","espacios","multas","morosos"]';
                     modulosVisibles = JSON.parse(modulosStr);
                     if (!Array.isArray(modulosVisibles)) modulosVisibles = ['mudanzas','aperturas','tarjetas','espacios','multas','morosos'];
                 } catch (e) {
@@ -19584,9 +19593,9 @@
             const esPrevisualizacion = !!opciones.esPrevisualizacion;
             const nombreMes = obtenerNombreMes(mesAnio);
             const personalizacion = await obtenerPersonalizacion().catch(() => ({}));
-            const nombreComunidad = personalizacion.comunidad || localStorage.getItem('nombreComunidad') || 'Comunidad';
-            const jefeEdificio = personalizacion.jefeEdificio || localStorage.getItem('jefeEdificio') || 'No especificado';
-            const numeroDeptos = personalizacion.deptos || localStorage.getItem('numeroDeptos') || 'No especificado';
+            const nombreComunidad = personalizacion.comunidad || localStorage.getItem(lsKey('nombreComunidad')) || 'Comunidad';
+            const jefeEdificio = personalizacion.jefeEdificio || localStorage.getItem(lsKey('jefeEdificio')) || 'No especificado';
+            const numeroDeptos = personalizacion.deptos || localStorage.getItem(lsKey('numeroDeptos')) || 'No especificado';
 
             let modulosVisibles = await obtenerModulosVisibles().catch(() => []);
             if (!Array.isArray(modulosVisibles) || !modulosVisibles.length) modulosVisibles = _EXCEL_MODULOS_REPORTE.slice();
@@ -20186,10 +20195,10 @@
                             
                             // Guardar en LocalStorage
                             try {
-                                localStorage.setItem(archivoKey, JSON.stringify(datos));
+                                localStorage.setItem(lsKey(archivoKey), JSON.stringify(datos));
                                 // Limpiar datos del mes actual (solo si no es un módulo de configuración)
                                 if (!modulo.includes('config') && !modulo.includes('personalizacion')) {
-                                    localStorage.removeItem(`${modulo}_${mesActual}`);
+                                    localStorage.removeItem(lsKey(`${modulo}_${mesActual}`));
                                 }
                                 modulosArchivados++;
                                 console.log(`✅ ${modulo} archivado en LocalStorage`);
@@ -20259,7 +20268,7 @@
                         console.error('❌ Error al actualizar config en Firestore:', error);
                     }
                 }
-                localStorage.setItem('ultimoMesProcesado', mesActual);
+                localStorage.setItem(lsKey('ultimoMesProcesado'), mesActual);
                 
                 // Generar reporte
                 progreso.actualizar(totalModulos + 3, totalModulos + 3, 'Generando reporte mensual...');
@@ -20347,7 +20356,7 @@
                     }
                     
                     // Respaldo: LocalStorage
-                    const datosLS = localStorage.getItem(archivoKey);
+                    const datosLS = localStorage.getItem(lsKey(archivoKey));
                     if (datosLS) {
                         try {
                             const datosArray = JSON.parse(datosLS);
@@ -20375,8 +20384,8 @@
                                 }
                                 
                                 // Guardar en LocalStorage como activo
-                                localStorage.setItem(activoKey, datosLS);
-                                localStorage.removeItem(archivoKey);
+                                localStorage.setItem(lsKey(activoKey), datosLS);
+                                localStorage.removeItem(lsKey(archivoKey));
                             }
                         } catch (error) {
                             console.error(`Error al reabrir ${modulo} en LocalStorage:`, error);
@@ -20419,7 +20428,7 @@
                     }
                     
                     // Respaldo: LocalStorage
-                    const datosLS = localStorage.getItem(archivoKey);
+                    const datosLS = localStorage.getItem(lsKey(archivoKey));
                     if (datosLS) {
                         try {
                             const datosArray = JSON.parse(datosLS);
@@ -20445,8 +20454,8 @@
                                 }
                                 
                                 // Guardar en LocalStorage como activo
-                                localStorage.setItem(activoKey, datosLS);
-                                localStorage.removeItem(archivoKey);
+                                localStorage.setItem(lsKey(activoKey), datosLS);
+                                localStorage.removeItem(lsKey(archivoKey));
                             }
                         } catch (error) {
                             console.error(`Error al reabrir ${moduloConfig} en LocalStorage:`, error);
@@ -20455,7 +20464,7 @@
                 }
                 
                 // Actualizar último mes procesado si el mes reabierto es más reciente
-                const ultimoMes = localStorage.getItem('ultimoMesProcesado');
+                const ultimoMes = localStorage.getItem(lsKey('ultimoMesProcesado'));
                 if (!ultimoMes || mesAnio > ultimoMes) {
                     if (firebaseInitialized && db) {
                         try {
@@ -20468,7 +20477,7 @@
                             console.error('Error al actualizar config en Firestore:', error);
                         }
                     }
-                    localStorage.setItem('ultimoMesProcesado', mesAnio);
+                    localStorage.setItem(lsKey('ultimoMesProcesado'), mesAnio);
                 }
                 
                 // Recargar lista de meses archivados (el mes reabierto ya no debería aparecer)
@@ -21532,11 +21541,11 @@
                 const modulos = ['mudanzas', 'aperturas', 'tarjetas', 'espacios', 'multas', 'morosos', 'ocupacion-residentes', 'caja', 'mantenciones', 'visitas-extraordinarias'];
                 const modulosConfig = ['mantenciones-config', 'caja-config'];
                 const tieneDatosActivos = modulos.some((modulo) => {
-                    const raw = localStorage.getItem(`${modulo}_${mesAnio}`);
+                    const raw = localStorage.getItem(lsKey(`${modulo}_${mesAnio}`));
                     return raw && raw !== '[]';
                 });
                 const tieneConfigActiva = modulosConfig.some((modulo) => {
-                    const raw = localStorage.getItem(`${modulo}_${mesAnio}`);
+                    const raw = localStorage.getItem(lsKey(`${modulo}_${mesAnio}`));
                     return raw && raw !== '[]' && raw !== 'null';
                 });
                 if ((!tieneDatosActivos && !tieneConfigActiva) && firebaseInitialized && db) {
@@ -21720,7 +21729,7 @@
                     }
                 }
                 if (!carpetaConfig) {
-                    const datosLS = localStorage.getItem(`mantenciones-config_${mesAUsar}`);
+                    const datosLS = localStorage.getItem(lsKey(`mantenciones-config_${mesAUsar}`));
                     if (datosLS && datosLS !== '[]' && datosLS !== 'null') {
                         try {
                             const parsed = JSON.parse(datosLS);
@@ -23283,7 +23292,7 @@
                         snap.forEach(function (d) { var o = d.data() || {}; o.id = d.id; arr.push(o); });
                         contarDesdeArr(arr);
                     } else {
-                        const raw = localStorage.getItem('gestion_comunidad_tareas_v1');
+                        const raw = localStorage.getItem(typeof lsKey === 'function' ? lsKey('gestion_comunidad_tareas_v1') : 'gestion_comunidad_tareas_v1');
                         if (raw) contarDesdeArr(JSON.parse(raw));
                     }
                 } catch (e) { /* ignorar */ }
@@ -24921,7 +24930,7 @@
             
             // Respaldo: LocalStorage
             try {
-                const datosLocal = localStorage.getItem(docKey);
+                const datosLocal = localStorage.getItem(lsKey(docKey));
                 if (datosLocal) {
                     const parsed = JSON.parse(datosLocal);
                     return Array.isArray(parsed) ? parsed : [];
@@ -25700,7 +25709,7 @@
                         tabsMenu.classList.add('collapsed');
                         mainContent.classList.add('menu-collapsed');
                     } else {
-                        var collapsed = localStorage.getItem('menuCollapsed') === 'true';
+                        var collapsed = localStorage.getItem(lsKey('menuCollapsed')) === 'true';
                         if (collapsed) {
                             tabsMenu.classList.add('collapsed');
                             mainContent.classList.add('menu-collapsed');
@@ -25718,7 +25727,7 @@
                     if (!tabsMenu.classList.contains('collapsed')) {
                         tabsMenu.classList.add('collapsed');
                         mainContent.classList.add('menu-collapsed');
-                        localStorage.setItem('menuCollapsed', 'true');
+                        localStorage.setItem(lsKey('menuCollapsed'), 'true');
                         syncMenuBackdrop();
                         updateToggleButtonPosition();
                     }
@@ -25728,7 +25737,7 @@
                     if (tabsMenu && mainContent) {
                         tabsMenu.classList.toggle('collapsed');
                         mainContent.classList.toggle('menu-collapsed');
-                        localStorage.setItem('menuCollapsed', tabsMenu.classList.contains('collapsed'));
+                        localStorage.setItem(lsKey('menuCollapsed'), tabsMenu.classList.contains('collapsed'));
                         updateToggleButtonPosition();
                         syncMenuBackdrop();
                     }
@@ -29264,12 +29273,12 @@
             toggle.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
             
             // Guardar estado en localStorage
-            localStorage.setItem('personalEdificioExpanded', isHidden ? 'true' : 'false');
+            localStorage.setItem(lsKey('personalEdificioExpanded'), isHidden ? 'true' : 'false');
         }
 
         // Función para restaurar estado de la sección de personal
         function restaurarEstadoPersonalEdificio() {
-            const savedState = localStorage.getItem('personalEdificioExpanded');
+            const savedState = localStorage.getItem(lsKey('personalEdificioExpanded'));
             if (savedState === 'false') {
                 const content = document.getElementById('personalEdificioContent');
                 const toggle = document.getElementById('personalEdificioToggle');
@@ -29290,12 +29299,12 @@
             toggle.textContent = isHidden ? '▼' : '▶';
             
             // Guardar estado en localStorage
-            localStorage.setItem('proveedoresExpanded', isHidden ? 'true' : 'false');
+            localStorage.setItem(lsKey('proveedoresExpanded'), isHidden ? 'true' : 'false');
         };
 
         // Función para restaurar estado de la sección de proveedores
         function restaurarEstadoProveedores() {
-            const savedState = localStorage.getItem('proveedoresExpanded');
+            const savedState = localStorage.getItem(lsKey('proveedoresExpanded'));
             // Por defecto, ocultar (solo mostrar si el usuario lo expandió previamente)
             if (savedState !== 'true') {
                 const content = document.getElementById('contenedorProveedores');
@@ -29425,7 +29434,7 @@
                         if (mesReabierto !== mesActual && !mesesArchivados.has(mesReabierto)) {
                             // Verificar si hay datos (no está vacío)
                             try {
-                                const datos = localStorage.getItem(key);
+                                const datos = localStorage.getItem(lsKey(key));
                                 if (datos && datos !== '[]' && datos !== 'null') {
                                     mesesReabiertos.add(mesReabierto);
                                 }
@@ -29629,7 +29638,7 @@
                 
                 // Si no se encontró en datos activos, buscar en LocalStorage
                 if (nominaArchivada.length === 0) {
-                    const datosLS = localStorage.getItem(`nomina_${mes}`);
+                    const datosLS = localStorage.getItem(lsKey(`nomina_${mes}`));
                     if (datosLS && datosLS !== '[]' && datosLS !== 'null') {
                         try {
                             const parsed = JSON.parse(datosLS);
@@ -29668,7 +29677,7 @@
                 }
                 
                 if (reemplazosArchivados.length === 0) {
-                    const datosLS = localStorage.getItem(`nomina-reemplazos_${mes}`);
+                    const datosLS = localStorage.getItem(lsKey(`nomina-reemplazos_${mes}`));
                     if (datosLS && datosLS !== '[]' && datosLS !== 'null') {
                         try {
                             const parsed = JSON.parse(datosLS);
@@ -29731,7 +29740,7 @@
 (function (global) {
     'use strict';
 
-    var LEGACY_STORAGE_KEY = 'gestion_comunidad_tareas_v1';
+    var LEGACY_STORAGE_KEY = typeof lsKey === 'function' ? lsKey('gestion_comunidad_tareas_v1') : 'ec_gestion_v1:gestion_comunidad_tareas_v1';
 
     function getFsContext() {
         if (typeof global.getGestionFirestoreDb !== 'function') return null;

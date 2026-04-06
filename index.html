@@ -7039,8 +7039,54 @@
          * Prefijo para localStorage: gestion-wm y esta página suelen abrirse desde el mismo origen (mismo localhost/puerto).
          * Sin prefijo, el navegador mezcla el respaldo local entre apps aunque Firestore sea otro proyecto.
          */
+        const LS_KEY_PREFIX = 'ec_gestion_v1:';
         function lsKey(storageKey) {
-            return 'ec_gestion_v1:' + String(storageKey);
+            return LS_KEY_PREFIX + String(storageKey);
+        }
+        /** Quita el prefijo de localStorage para interpretar ids lógicos (mudanzas_archivo_2026-03). */
+        function quitarPrefijoLsKey(keyCompleto) {
+            if (!keyCompleto || typeof keyCompleto !== 'string') return '';
+            return keyCompleto.startsWith(LS_KEY_PREFIX) ? keyCompleto.slice(LS_KEY_PREFIX.length) : keyCompleto;
+        }
+        /** Normaliza YYYY-M o YYYY-MM a YYYY-MM (evita que marzo quede como 2026-3 sin coincidir con 2026-03). */
+        function normalizarMesAnio(mesAnio) {
+            if (mesAnio == null || mesAnio === '') return '';
+            const s = String(mesAnio).trim();
+            const m = s.match(/^(\d{4})-(\d{1,2})$/);
+            if (!m) return s;
+            const mo = parseInt(m[2], 10);
+            if (mo < 1 || mo > 12) return s;
+            return `${m[1]}-${String(mo).padStart(2, '0')}`;
+        }
+        /** Sufijos de documento a probar si el mes se guardó con o sin cero a la izquierda. */
+        function variantesMesAnioParaClavesDoc(mesAnio) {
+            const s = mesAnio == null ? '' : String(mesAnio).trim();
+            if (!s) return [];
+            const norm = normalizarMesAnio(s);
+            const out = new Set([norm, s]);
+            const m = s.match(/^(\d{4})-(\d{1,2})$/);
+            if (m) out.add(`${m[1]}-${parseInt(m[2], 10)}`);
+            return Array.from(out).filter(Boolean);
+        }
+        /**
+         * Interpreta documentos tipo modulo_YYYY-MM o modulo_archivo_YYYY-MM (el nombre del módulo puede llevar guiones).
+         * Acepta mes con 1 o 2 dígitos; devuelve siempre mes normalizado.
+         */
+        function parseDocIdMesAdministrativo(key, listaModulos) {
+            if (!key || typeof key !== 'string' || !listaModulos) return null;
+            if (key.includes('config') || key.includes('personalizacion')) return null;
+            const arch = key.match(/^(.+)_archivo_(\d{4}-\d{1,2})$/);
+            if (arch && listaModulos.includes(arch[1])) {
+                const mesNorm = normalizarMesAnio(arch[2]);
+                return mesNorm ? { tipo: 'archivo', modulo: arch[1], mes: mesNorm } : null;
+            }
+            if (key.includes('_archivo_')) return null;
+            const act = key.match(/^(.+)_(\d{4}-\d{1,2})$/);
+            if (act && listaModulos.includes(act[1])) {
+                const mesNorm = normalizarMesAnio(act[2]);
+                return mesNorm ? { tipo: 'activo', modulo: act[1], mes: mesNorm } : null;
+            }
+            return null;
         }
         const firebaseConfig = {
             apiKey: "AIzaSyCbHnFHAxrmEyb9IL0m62NAod9kGKqWG3k",
@@ -8397,9 +8443,18 @@
                 } catch (error) {
                     console.error('Error al leer ocupación persistente (LocalStorage):', error);
                 }
-                const mesActual = obtenerMesActual();
-                const mesConsulta = window.mesEnConsulta || mesActual;
-                const clavesLegacy = [`${key}_${mesConsulta}`, `${key}_${mesActual}`];
+                const mesActualNorm = normalizarMesAnio(obtenerMesActual());
+                const mesConsultaBruto = window.mesEnConsulta || mesActualNorm;
+                const clavesLegacy = [];
+                const vistoLegacy = new Set();
+                for (const v of variantesMesAnioParaClavesDoc(mesConsultaBruto)) {
+                    const lk = `${key}_${v}`;
+                    if (!vistoLegacy.has(lk)) { vistoLegacy.add(lk); clavesLegacy.push(lk); }
+                }
+                for (const v of variantesMesAnioParaClavesDoc(mesActualNorm)) {
+                    const lk = `${key}_${v}`;
+                    if (!vistoLegacy.has(lk)) { vistoLegacy.add(lk); clavesLegacy.push(lk); }
+                }
                 for (const lk of clavesLegacy) {
                     if (firebaseInitialized && db) {
                         try {
@@ -8423,91 +8478,35 @@
                 return [];
             }
 
-            const mesActual = obtenerMesActual();
-            const mesConsulta = window.mesEnConsulta || mesActual;
-            
-            // Si hay un mes en consulta y es diferente al actual, primero intentar obtener datos activos (reabiertos)
-            // Si no hay datos activos, entonces buscar datos archivados
-            let docKey = `${key}_${mesConsulta}`;
-            let datosEncontrados = null;
-            
-            // Intentar obtener datos activos (reabiertos) desde Firestore
-            if (firebaseInitialized && db && mesConsulta !== mesActual) {
-                try {
-                    const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(docKey);
-                    const doc = await docRef.get();
-                    if (doc.exists) {
-                        const data = doc.data();
-                        datosEncontrados = Array.isArray(data.datos) ? data.datos : [];
-                        if (datosEncontrados.length > 0) {
-                            return datosEncontrados;
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error al leer datos activos de Firestore:', error);
-                }
-            }
-            
-            // Si no hay datos activos y hay mes en consulta, buscar datos archivados
-            if (mesConsulta !== mesActual && (!datosEncontrados || datosEncontrados.length === 0)) {
-                docKey = `${key}_archivo_${mesConsulta}`;
-            }
-            
-            // Intentar obtener de Firestore
-            if (firebaseInitialized && db) {
-                try {
-                    const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(docKey);
-                    const doc = await docRef.get();
-                    if (doc.exists) {
-                        const data = doc.data();
-                        // Asegurar que siempre devolvemos un array
-                        const resultado = data.datos || [];
-                        return Array.isArray(resultado) ? resultado : [];
-                    }
-                } catch (error) {
-                    console.error('Error al leer de Firestore:', error);
-                    // Si hay error de permisos, continuar con LocalStorage
-                }
-            }
-            
-            // Respaldo: LocalStorage - primero intentar datos activos si hay mes en consulta
-            if (mesConsulta !== mesActual) {
-                try {
-                    const datosActivos = localStorage.getItem(lsKey(`${key}_${mesConsulta}`));
-                    if (datosActivos) {
-                        const parsed = JSON.parse(datosActivos);
-                        if (Array.isArray(parsed) && parsed.length > 0) {
-                            return parsed;
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error al leer datos activos de LocalStorage:', error);
-                }
-            }
-            
-            // Si no hay datos activos, buscar archivados o del mes actual
-            try {
-                const datos = localStorage.getItem(lsKey(docKey));
-                if (datos) {
-                    const parsed = JSON.parse(datos);
-                    return Array.isArray(parsed) ? parsed : [];
-                }
-            } catch (error) {
-                console.error('Error al leer de LocalStorage:', error);
-            }
-            
-            // Si todo falla, devolver array vacío
-            return [];
-        }
+            const mesActualNorm = normalizarMesAnio(obtenerMesActual());
+            const mesBruto = window.mesEnConsulta || mesActualNorm;
+            const variantes = variantesMesAnioParaClavesDoc(mesBruto);
 
-        // Función para obtener datos de un mes específico (activo o archivado)
-        async function obtenerDatosMesEspecifico(key, mesAnio) {
-            if (!mesAnio) return [];
-            // Priorizar datos activos (reabiertos), luego archivados
-            const posiblesClaves = [`${key}_${mesAnio}`, `${key}_archivo_${mesAnio}`];
-            
-            for (const docKey of posiblesClaves) {
-                // Intentar obtener de Firestore
+            for (const mesConsulta of variantes) {
+                let docKey = `${key}_${mesConsulta}`;
+                let datosEncontrados = null;
+                const consultaDistinta = normalizarMesAnio(mesConsulta) !== mesActualNorm;
+
+                if (firebaseInitialized && db && consultaDistinta) {
+                    try {
+                        const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(docKey);
+                        const doc = await docRef.get();
+                        if (doc.exists) {
+                            const data = doc.data();
+                            datosEncontrados = Array.isArray(data.datos) ? data.datos : [];
+                            if (datosEncontrados.length > 0) {
+                                return datosEncontrados;
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Error al leer datos activos de Firestore:', error);
+                    }
+                }
+
+                if (consultaDistinta && (!datosEncontrados || datosEncontrados.length === 0)) {
+                    docKey = `${key}_archivo_${mesConsulta}`;
+                }
+
                 if (firebaseInitialized && db) {
                     try {
                         const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(docKey);
@@ -8515,103 +8514,135 @@
                         if (doc.exists) {
                             const data = doc.data();
                             const resultado = data.datos || [];
-                            // Para configuraciones, siempre retornar si hay datos
-                            if (key.includes('-config')) {
-                                if (Array.isArray(resultado) && resultado.length > 0) {
-                                    return resultado;
-                                }
-                            } else {
-                                // Para otros módulos, verificar flag reabierto si es necesario
-                                if (docKey.includes('_archivo_') || (data.reabierto === true && docKey === `${key}_${mesAnio}`)) {
-                                    if (Array.isArray(resultado) && resultado.length > 0) {
-                                        return resultado;
-                                    }
-                                } else if (!docKey.includes('_archivo_')) {
-                                    // Datos activos (pueden ser reabiertos o del mes actual)
-                                    if (Array.isArray(resultado) && resultado.length > 0) {
-                                        return resultado;
-                                    }
-                                }
+                            return Array.isArray(resultado) ? resultado : [];
+                        }
+                    } catch (error) {
+                        console.error('Error al leer de Firestore:', error);
+                    }
+                }
+
+                if (consultaDistinta) {
+                    try {
+                        const datosActivos = localStorage.getItem(lsKey(`${key}_${mesConsulta}`));
+                        if (datosActivos) {
+                            const parsed = JSON.parse(datosActivos);
+                            if (Array.isArray(parsed) && parsed.length > 0) {
+                                return parsed;
                             }
                         }
                     } catch (error) {
-                        console.error(`Error al leer de Firestore para ${docKey}:`, error);
+                        console.error('Error al leer datos activos de LocalStorage:', error);
                     }
                 }
-                
-                // Respaldo: LocalStorage
+
                 try {
-                    const datosLS = localStorage.getItem(lsKey(docKey));
-                    if (datosLS && datosLS !== '[]' && datosLS !== 'null') {
-                        const parsed = JSON.parse(datosLS);
-                        if (Array.isArray(parsed) && parsed.length > 0) {
-                            return parsed;
-                        }
+                    const datos = localStorage.getItem(lsKey(docKey));
+                    if (datos) {
+                        const parsed = JSON.parse(datos);
+                        return Array.isArray(parsed) ? parsed : [];
                     }
                 } catch (error) {
-                    console.error(`Error al leer de LocalStorage para ${docKey}:`, error);
+                    console.error('Error al leer de LocalStorage:', error);
                 }
             }
-            
+
+            return [];
+        }
+
+        // Función para obtener datos de un mes específico (activo o archivado)
+        async function obtenerDatosMesEspecifico(key, mesAnio) {
+            if (!mesAnio) return [];
+            for (const suf of variantesMesAnioParaClavesDoc(mesAnio)) {
+                const posiblesClaves = [`${key}_${suf}`, `${key}_archivo_${suf}`];
+                for (const docKey of posiblesClaves) {
+                    if (firebaseInitialized && db) {
+                        try {
+                            const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(docKey);
+                            const doc = await docRef.get();
+                            if (doc.exists) {
+                                const data = doc.data();
+                                const resultado = data.datos || [];
+                                if (key.includes('-config')) {
+                                    if (Array.isArray(resultado) && resultado.length > 0) {
+                                        return resultado;
+                                    }
+                                } else {
+                                    if (docKey.includes('_archivo_') || (data.reabierto === true && docKey === `${key}_${suf}`)) {
+                                        if (Array.isArray(resultado) && resultado.length > 0) {
+                                            return resultado;
+                                        }
+                                    } else if (!docKey.includes('_archivo_')) {
+                                        if (Array.isArray(resultado) && resultado.length > 0) {
+                                            return resultado;
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (error) {
+                            console.error(`Error al leer de Firestore para ${docKey}:`, error);
+                        }
+                    }
+                    try {
+                        const datosLS = localStorage.getItem(lsKey(docKey));
+                        if (datosLS && datosLS !== '[]' && datosLS !== 'null') {
+                            const parsed = JSON.parse(datosLS);
+                            if (Array.isArray(parsed) && parsed.length > 0) {
+                                return parsed;
+                            }
+                        }
+                    } catch (error) {
+                        console.error(`Error al leer de LocalStorage para ${docKey}:`, error);
+                    }
+                }
+            }
             return [];
         }
 
         // Función para obtener datos archivados de un mes específico (para reportes)
         async function obtenerDatosArchivados(key, mesAnio) {
-            const archivoKey = `${key}_archivo_${mesAnio}`;
-            
-            // Intentar obtener de Firestore
-            if (firebaseInitialized && db) {
-                try {
-                    const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(archivoKey);
-                    const doc = await docRef.get();
-                    if (doc.exists) {
-                        const data = doc.data();
-                        const resultado = data.datos || [];
-                        if (Array.isArray(resultado)) {
-                            console.log(`✓ Datos archivados cargados desde Firestore: ${key} (${resultado.length} registros)`);
-                            return resultado;
-                        } else {
+            for (const suf of variantesMesAnioParaClavesDoc(mesAnio)) {
+                const archivoKey = `${key}_archivo_${suf}`;
+                if (firebaseInitialized && db) {
+                    try {
+                        const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(archivoKey);
+                        const doc = await docRef.get();
+                        if (doc.exists) {
+                            const data = doc.data();
+                            const resultado = data.datos || [];
+                            if (Array.isArray(resultado)) {
+                                console.log(`✓ Datos archivados cargados desde Firestore: ${key} (${resultado.length} registros)`);
+                                return resultado;
+                            }
                             console.warn(`⚠ Datos archivados de Firestore no es un array para ${key}:`, resultado);
                             return [];
                         }
-                    } else {
-                        console.log(`ℹ No se encontró documento archivado en Firestore para ${key} con key: ${archivoKey}`);
+                    } catch (error) {
+                        console.error(`✗ Error al leer datos archivados de Firestore para ${key}:`, error);
                     }
-                } catch (error) {
-                    console.error(`✗ Error al leer datos archivados de Firestore para ${key}:`, error);
                 }
-            }
-            
-            // Respaldo: LocalStorage
-            try {
-                const datos = localStorage.getItem(lsKey(archivoKey));
-                if (datos) {
-                    const parsed = JSON.parse(datos);
-                    if (Array.isArray(parsed)) {
-                        console.log(`✓ Datos archivados cargados desde LocalStorage: ${key} (${parsed.length} registros)`);
-                        return parsed;
-                    } else {
+                try {
+                    const datos = localStorage.getItem(lsKey(archivoKey));
+                    if (datos) {
+                        const parsed = JSON.parse(datos);
+                        if (Array.isArray(parsed)) {
+                            console.log(`✓ Datos archivados cargados desde LocalStorage: ${key} (${parsed.length} registros)`);
+                            return parsed;
+                        }
                         console.warn(`⚠ Datos archivados de LocalStorage no es un array para ${key}:`, parsed);
                         return [];
                     }
-                } else {
-                    console.log(`ℹ No se encontraron datos archivados en LocalStorage para ${key} con key: ${archivoKey}`);
+                } catch (error) {
+                    console.error(`✗ Error al leer datos archivados de LocalStorage para ${key}:`, error);
                 }
-            } catch (error) {
-                console.error(`✗ Error al leer datos archivados de LocalStorage para ${key}:`, error);
             }
-            
-            // Si todo falla, devolver array vacío
             console.warn(`⚠ No se pudieron cargar datos archivados para ${key}, retornando array vacío`);
             return [];
         }
 
         // Función para guardar datos del mes actual o del mes reabierto
         async function guardarDatosMes(key, datos) {
-            const mesActual = obtenerMesActual();
-            // Si hay un mes reabierto, guardar en ese mes; si no, guardar en el mes actual
-            const mesAGuardar = (window.mesReabierto && window.mesEnConsulta) ? window.mesEnConsulta : mesActual;
+            const mesActual = normalizarMesAnio(obtenerMesActual());
+            const mesAGuardar = normalizarMesAnio((window.mesReabierto && window.mesEnConsulta) ? window.mesEnConsulta : mesActual) || mesActual;
             const esOcupacionGlobal = key === 'ocupacion-residentes';
             const docKey = esOcupacionGlobal ? OCUPACION_DOC_ID : `${key}_${mesAGuardar}`;
             
@@ -17042,28 +17073,13 @@
                     snapshot.forEach(doc => {
                         const key = doc.id;
                         const data = doc.data();
-                        
-                        // Buscar meses archivados
-                        if (key && key.includes('_archivo_')) {
-                            const partes = key.split('_archivo_');
-                            if (partes.length === 2 && modulos.includes(partes[0])) {
-                                const mesArchivado = partes[1];
-                                // Solo incluir meses que no sean el mes actual
-                                if (mesArchivado !== mesActual) {
-                                    mesesArchivados.add(mesArchivado);
-                                }
-                            }
+                        const parsed = parseDocIdMesAdministrativo(key, modulos);
+                        if (!parsed) return;
+                        if (parsed.tipo === 'archivo' && parsed.mes !== mesActual) {
+                            mesesArchivados.add(parsed.mes);
                         }
-                        
-                        // Buscar meses reabiertos (tienen reabierto: true y no son el mes actual)
-                        if (key && !key.includes('_archivo_') && !key.includes('config') && !key.includes('personalizacion')) {
-                            const partes = key.split('_');
-                            if (partes.length === 2 && modulos.includes(partes[0])) {
-                                const mesReabierto = partes[1];
-                                if (mesReabierto !== mesActual && data.reabierto === true) {
-                                    mesesReabiertos.add(mesReabierto);
-                                }
-                            }
+                        if (parsed.tipo === 'activo' && parsed.mes !== mesActual && data.reabierto === true) {
+                            mesesReabiertos.add(parsed.mes);
                         }
                     });
                 } catch (error) {
@@ -17071,39 +17087,29 @@
                 }
             }
             
-            // Buscar todos los meses archivados en localStorage
+            // Buscar todos los meses archivados en localStorage (claves con prefijo ec_gestion_v1:)
             for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && key.includes('_archivo_')) {
-                    const partes = key.split('_archivo_');
-                    if (partes.length === 2 && modulos.includes(partes[0])) {
-                        const mesArchivado = partes[1];
-                        // Solo incluir meses que no sean el mes actual
-                        if (mesArchivado !== mesActual) {
-                            mesesArchivados.add(mesArchivado);
-                        }
-                    }
+                const keyCompleta = localStorage.key(i);
+                const key = quitarPrefijoLsKey(keyCompleta);
+                const parsed = parseDocIdMesAdministrativo(key, modulos);
+                if (parsed && parsed.tipo === 'archivo' && parsed.mes !== mesActual) {
+                    mesesArchivados.add(parsed.mes);
                 }
             }
             
             // Buscar meses reabiertos en localStorage (verificar si tienen datos activos sin ser el mes actual)
             for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && !key.includes('_archivo_') && !key.includes('config') && !key.includes('personalizacion')) {
-                    const partes = key.split('_');
-                    if (partes.length === 2 && modulos.includes(partes[0])) {
-                        const mesReabierto = partes[1];
-                        if (mesReabierto !== mesActual && !mesesArchivados.has(mesReabierto)) {
-                            // Verificar si hay datos (no está vacío)
-                            try {
-                                const datos = localStorage.getItem(lsKey(key));
-                                if (datos && datos !== '[]' && datos !== 'null') {
-                                    mesesReabiertos.add(mesReabierto);
-                                }
-                            } catch (e) {
-                                // Ignorar errores de parseo
-                            }
+                const keyCompleta = localStorage.key(i);
+                const key = quitarPrefijoLsKey(keyCompleta);
+                const parsed = parseDocIdMesAdministrativo(key, modulos);
+                if (parsed && parsed.tipo === 'activo' && parsed.mes !== mesActual && !mesesArchivados.has(parsed.mes)) {
+                    try {
+                        const datos = localStorage.getItem(keyCompleta);
+                        if (datos && datos !== '[]' && datos !== 'null') {
+                            mesesReabiertos.add(parsed.mes);
                         }
+                    } catch (e) {
+                        // Ignorar errores de parseo
                     }
                 }
             }
@@ -17219,7 +17225,8 @@
         
         // Función para cargar datos del mes seleccionado (disponible globalmente)
         window.cargarMesConsulta = async function() {
-            const mesSeleccionado = document.getElementById('mesConsulta').value;
+            const mesSelRaw = document.getElementById('mesConsulta').value;
+            const mesSeleccionado = normalizarMesAnio(mesSelRaw) || mesSelRaw;
             
             if (!mesSeleccionado) {
                 volverMesActual();
@@ -17231,26 +17238,26 @@
             window.mesReabierto = false; // Por defecto, asumir que es archivado
             const nombreMes = obtenerNombreMes(mesSeleccionado);
             
-            // Verificar si hay datos activos (reabierto) o solo archivados
-            const mesActual = obtenerMesActual();
+            const mesActual = normalizarMesAnio(obtenerMesActual());
             
             if (mesSeleccionado !== mesActual) {
-                // Verificar si hay datos activos en Firestore o LocalStorage
                 const modulos = ['mudanzas', 'aperturas', 'tarjetas', 'espacios', 'multas', 'morosos', 'caja', 'mantenciones', 'visitas-extraordinarias', 'pagosAseo', 'nomina', 'nomina-reemplazos', 'insumos', 'lecturasAguaCaliente'];
                 let tieneDatosActivos = false;
-                
-                // Verificar en Firestore primero
+                const sufijosMes = variantesMesAnioParaClavesDoc(mesSeleccionado);
+
                 if (firebaseInitialized && db) {
                     try {
-                        for (const modulo of modulos) {
-                            const activoKey = `${modulo}_${mesSeleccionado}`;
-                            const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(activoKey);
-                            const doc = await docRef.get();
-                            if (doc.exists) {
-                                const data = doc.data();
-                                if (data.reabierto === true || (data.datos && Array.isArray(data.datos) && data.datos.length > 0)) {
-                                    tieneDatosActivos = true;
-                                    break;
+                        outerActivo: for (const modulo of modulos) {
+                            for (const suf of sufijosMes) {
+                                const activoKey = `${modulo}_${suf}`;
+                                const docRef = db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(activoKey);
+                                const doc = await docRef.get();
+                                if (doc.exists) {
+                                    const data = doc.data();
+                                    if (data.reabierto === true || (data.datos && Array.isArray(data.datos) && data.datos.length > 0)) {
+                                        tieneDatosActivos = true;
+                                        break outerActivo;
+                                    }
                                 }
                             }
                         }
@@ -17258,15 +17265,16 @@
                         console.error('Error al verificar datos activos en Firestore:', error);
                     }
                 }
-                
-                // Si no se encontró en Firestore, verificar en LocalStorage
+
                 if (!tieneDatosActivos) {
-                    tieneDatosActivos = modulos.some(modulo => {
-                        const datosActivos = localStorage.getItem(lsKey(`${modulo}_${mesSeleccionado}`));
-                        return datosActivos && datosActivos !== '[]' && datosActivos !== 'null';
-                    });
+                    tieneDatosActivos = modulos.some(modulo =>
+                        sufijosMes.some(suf => {
+                            const datosActivos = localStorage.getItem(lsKey(`${modulo}_${suf}`));
+                            return datosActivos && datosActivos !== '[]' && datosActivos !== 'null';
+                        })
+                    );
                 }
-                
+
                 window.mesReabierto = tieneDatosActivos;
             }
             
@@ -17323,7 +17331,7 @@
 
         // Función para cargar datos del mes consultado en todas las tablas (cada módulo muestra datos del mes sin edición)
         function cargarDatosMesConsulta(mesAnio) {
-            if (mesAnio) window.mesEnConsulta = mesAnio;
+            if (mesAnio) window.mesEnConsulta = normalizarMesAnio(mesAnio) || mesAnio;
             // obtenerDatosMes usa window.mesEnConsulta; así cada módulo muestra el mes consultado en solo lectura
             cargarDatos();
         }
@@ -20296,9 +20304,10 @@
                 return;
             }
             
-            const mesAnio = window.mesEnConsulta;
+            const mesAnio = normalizarMesAnio(window.mesEnConsulta) || window.mesEnConsulta;
+            window.mesEnConsulta = mesAnio;
             const nombreMes = obtenerNombreMes(mesAnio);
-            const mesActual = obtenerMesActual();
+            const mesActual = normalizarMesAnio(obtenerMesActual());
             
             // No permitir reabrir el mes actual
             if (mesAnio === mesActual) {
@@ -20322,143 +20331,122 @@
                 let datosReabiertos = 0;
                 
                 for (const modulo of modulos) {
-                    const archivoKey = `${modulo}_archivo_${mesAnio}`;
                     const activoKey = `${modulo}_${mesAnio}`;
-                    
-                    // Obtener datos archivados desde Firestore o LocalStorage
-                    let datos = null;
-                    
-                    if (firebaseInitialized && db) {
-                        try {
-                            const doc = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(archivoKey).get();
-                            if (doc.exists) {
-                                const data = doc.data();
-                                datos = Array.isArray(data.datos) ? data.datos : [];
-                                
-                                if (datos.length > 0) {
-                                    // Guardar como activo en Firestore
-                                    await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(activoKey).set({
-                                        datos: datos,
-                                        mes: mesAnio,
-                                        modulo: modulo,
-                                        reabierto: true,
-                                        reabiertoEn: firebase.firestore.FieldValue.serverTimestamp()
-                                    });
-                                    
-                                    // Eliminar archivo
-                                    await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(archivoKey).delete();
-                                    datosReabiertos += datos.length;
-                                }
-                            }
-                        } catch (error) {
-                            console.error(`Error al reabrir ${modulo} en Firestore:`, error);
-                        }
-                    }
-                    
-                    // Respaldo: LocalStorage
-                    const datosLS = localStorage.getItem(lsKey(archivoKey));
-                    if (datosLS) {
-                        try {
-                            const datosArray = JSON.parse(datosLS);
-                            if (Array.isArray(datosArray) && datosArray.length > 0) {
-                                // Si no se obtuvieron datos de Firestore, usar los de LocalStorage
-                                if (!datos || datos.length === 0) {
-                                    datos = datosArray;
-                                    
-                                    // Intentar guardar en Firestore también para sincronización
-                                    if (firebaseInitialized && db) {
-                                        try {
-                                            await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(activoKey).set({
-                                                datos: datos,
-                                                mes: mesAnio,
-                                                modulo: modulo,
-                                                reabierto: true,
-                                                reabiertoEn: firebase.firestore.FieldValue.serverTimestamp()
-                                            });
-                                        } catch (error) {
-                                            console.error(`Error al guardar ${modulo} reabierto en Firestore:`, error);
-                                        }
+                    let datosDesdeFs = null;
+                    for (const suf of variantesMesAnioParaClavesDoc(mesAnio)) {
+                        const archivoKey = `${modulo}_archivo_${suf}`;
+                        if (firebaseInitialized && db) {
+                            try {
+                                const doc = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(archivoKey).get();
+                                if (doc.exists) {
+                                    const data = doc.data();
+                                    const arr = Array.isArray(data.datos) ? data.datos : [];
+                                    if (arr.length > 0) {
+                                        await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(activoKey).set({
+                                            datos: arr,
+                                            mes: mesAnio,
+                                            modulo: modulo,
+                                            reabierto: true,
+                                            reabiertoEn: firebase.firestore.FieldValue.serverTimestamp()
+                                        });
+                                        await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(archivoKey).delete();
+                                        datosReabiertos += arr.length;
+                                        datosDesdeFs = arr;
+                                        break;
                                     }
-                                    
-                                    datosReabiertos += datosArray.length;
                                 }
-                                
-                                // Guardar en LocalStorage como activo
-                                localStorage.setItem(lsKey(activoKey), datosLS);
-                                localStorage.removeItem(lsKey(archivoKey));
+                            } catch (error) {
+                                console.error(`Error al reabrir ${modulo} en Firestore:`, error);
                             }
-                        } catch (error) {
-                            console.error(`Error al reabrir ${modulo} en LocalStorage:`, error);
+                        }
+                        const datosLS = localStorage.getItem(lsKey(archivoKey));
+                        if (datosLS) {
+                            try {
+                                const datosArray = JSON.parse(datosLS);
+                                if (Array.isArray(datosArray) && datosArray.length > 0) {
+                                    if (!datosDesdeFs || datosDesdeFs.length === 0) {
+                                        if (firebaseInitialized && db) {
+                                            try {
+                                                await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(activoKey).set({
+                                                    datos: datosArray,
+                                                    mes: mesAnio,
+                                                    modulo: modulo,
+                                                    reabierto: true,
+                                                    reabiertoEn: firebase.firestore.FieldValue.serverTimestamp()
+                                                });
+                                            } catch (error) {
+                                                console.error(`Error al guardar ${modulo} reabierto en Firestore:`, error);
+                                            }
+                                        }
+                                        datosReabiertos += datosArray.length;
+                                    }
+                                    localStorage.setItem(lsKey(activoKey), datosLS);
+                                    localStorage.removeItem(lsKey(archivoKey));
+                                    break;
+                                }
+                            } catch (error) {
+                                console.error(`Error al reabrir ${modulo} en LocalStorage:`, error);
+                            }
                         }
                     }
                 }
                 
                 // Reabrir también los módulos de configuración (mantenciones-config, caja-config)
                 for (const moduloConfig of modulosConfig) {
-                    const archivoKey = `${moduloConfig}_archivo_${mesAnio}`;
                     const activoKey = `${moduloConfig}_${mesAnio}`;
-                    
-                    // Obtener datos archivados desde Firestore o LocalStorage
-                    let datos = null;
-                    
-                    if (firebaseInitialized && db) {
-                        try {
-                            const doc = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(archivoKey).get();
-                            if (doc.exists) {
-                                const data = doc.data();
-                                datos = Array.isArray(data.datos) ? data.datos : [];
-                                
-                                if (datos.length > 0) {
-                                    // Guardar como activo en Firestore
-                                    await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(activoKey).set({
-                                        datos: datos,
-                                        mes: mesAnio,
-                                        modulo: moduloConfig,
-                                        reabierto: true,
-                                        reabiertoEn: firebase.firestore.FieldValue.serverTimestamp()
-                                    });
-                                    
-                                    // Eliminar archivo
-                                    await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(archivoKey).delete();
-                                }
-                            }
-                        } catch (error) {
-                            console.error(`Error al reabrir ${moduloConfig} en Firestore:`, error);
-                        }
-                    }
-                    
-                    // Respaldo: LocalStorage
-                    const datosLS = localStorage.getItem(lsKey(archivoKey));
-                    if (datosLS) {
-                        try {
-                            const datosArray = JSON.parse(datosLS);
-                            if (Array.isArray(datosArray) && datosArray.length > 0) {
-                                // Si no se obtuvieron datos de Firestore, usar los de LocalStorage
-                                if (!datos || datos.length === 0) {
-                                    datos = datosArray;
-                                    
-                                    // Intentar guardar en Firestore también para sincronización
-                                    if (firebaseInitialized && db) {
-                                        try {
-                                            await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(activoKey).set({
-                                                datos: datos,
-                                                mes: mesAnio,
-                                                modulo: moduloConfig,
-                                                reabierto: true,
-                                                reabiertoEn: firebase.firestore.FieldValue.serverTimestamp()
-                                            });
-                                        } catch (error) {
-                                            console.error(`Error al guardar ${moduloConfig} reabierto en Firestore:`, error);
-                                        }
+                    let datosDesdeFsCfg = null;
+                    for (const suf of variantesMesAnioParaClavesDoc(mesAnio)) {
+                        const archivoKey = `${moduloConfig}_archivo_${suf}`;
+                        if (firebaseInitialized && db) {
+                            try {
+                                const doc = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(archivoKey).get();
+                                if (doc.exists) {
+                                    const data = doc.data();
+                                    const arr = Array.isArray(data.datos) ? data.datos : [];
+                                    if (arr.length > 0) {
+                                        await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(activoKey).set({
+                                            datos: arr,
+                                            mes: mesAnio,
+                                            modulo: moduloConfig,
+                                            reabierto: true,
+                                            reabiertoEn: firebase.firestore.FieldValue.serverTimestamp()
+                                        });
+                                        await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(archivoKey).delete();
+                                        datosDesdeFsCfg = arr;
+                                        break;
                                     }
                                 }
-                                
-                                // Guardar en LocalStorage como activo
-                                localStorage.setItem(lsKey(activoKey), datosLS);
-                                localStorage.removeItem(lsKey(archivoKey));
+                            } catch (error) {
+                                console.error(`Error al reabrir ${moduloConfig} en Firestore:`, error);
                             }
-                        } catch (error) {
-                            console.error(`Error al reabrir ${moduloConfig} en LocalStorage:`, error);
+                        }
+                        const datosLS = localStorage.getItem(lsKey(archivoKey));
+                        if (datosLS) {
+                            try {
+                                const datosArray = JSON.parse(datosLS);
+                                if (Array.isArray(datosArray) && datosArray.length > 0) {
+                                    if (!datosDesdeFsCfg || datosDesdeFsCfg.length === 0) {
+                                        if (firebaseInitialized && db) {
+                                            try {
+                                                await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).doc(activoKey).set({
+                                                    datos: datosArray,
+                                                    mes: mesAnio,
+                                                    modulo: moduloConfig,
+                                                    reabierto: true,
+                                                    reabiertoEn: firebase.firestore.FieldValue.serverTimestamp()
+                                                });
+                                            } catch (error) {
+                                                console.error(`Error al guardar ${moduloConfig} reabierto en Firestore:`, error);
+                                            }
+                                        }
+                                    }
+                                    localStorage.setItem(lsKey(activoKey), datosLS);
+                                    localStorage.removeItem(lsKey(archivoKey));
+                                    break;
+                                }
+                            } catch (error) {
+                                console.error(`Error al reabrir ${moduloConfig} en LocalStorage:`, error);
+                            }
                         }
                     }
                 }
@@ -25038,47 +25026,20 @@
                     const snapshot = await db.collection(FIRESTORE_COLLECTION_COMUNIDAD).get();
                     snapshot.forEach(doc => {
                         const key = doc.id;
-                        // Buscar meses activos
-                        if (key && key.includes('_')) {
-                            const partes = key.split('_');
-                            if (partes.length >= 2 && modulos.includes(partes[0])) {
-                                const posibleMes = partes.slice(1).join('_');
-                                if (/^\d{4}-\d{2}$/.test(posibleMes)) {
-                                    meses.add(posibleMes);
-                                }
-                            }
-                        }
-                        // Buscar meses archivados
-                        if (key && key.includes('_archivo_')) {
-                            const partes = key.split('_archivo_');
-                            if (partes.length === 2 && modulos.includes(partes[0])) {
-                                meses.add(partes[1]);
-                            }
-                        }
+                        const parsed = parseDocIdMesAdministrativo(key, modulos);
+                        if (parsed) meses.add(parsed.mes);
                     });
                 } catch (error) {
                     console.error('Error al buscar meses en Firestore:', error);
                 }
             }
             
-            // Buscar meses en localStorage
+            // Buscar meses en localStorage (claves con prefijo ec_gestion_v1:)
             for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && key.includes('_')) {
-                    const partes = key.split('_');
-                    if (partes.length >= 2 && modulos.includes(partes[0])) {
-                        const posibleMes = partes.slice(1).join('_');
-                        if (/^\d{4}-\d{2}$/.test(posibleMes)) {
-                            meses.add(posibleMes);
-                        }
-                    }
-                }
-                if (key && key.includes('_archivo_')) {
-                    const partes = key.split('_archivo_');
-                    if (partes.length === 2 && modulos.includes(partes[0])) {
-                        meses.add(partes[1]);
-                    }
-                }
+                const keyCompleta = localStorage.key(i);
+                const key = quitarPrefijoLsKey(keyCompleta);
+                const parsed = parseDocIdMesAdministrativo(key, modulos);
+                if (parsed) meses.add(parsed.mes);
             }
             
             // Ordenar meses (más reciente primero) y devolver
@@ -29416,25 +29377,23 @@
                 }
             }
 
-            // Buscar en localStorage
+            // Buscar en localStorage (claves con prefijo ec_gestion_v1:)
             for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && key.includes('nomina_archivo_')) {
+                const keyCompleta = localStorage.key(i);
+                const key = quitarPrefijoLsKey(keyCompleta);
+                if (key.includes('nomina_archivo_')) {
                     const partes = key.split('nomina_archivo_');
                     if (partes.length === 2) {
                         mesesArchivados.add(partes[1]);
                     }
                 }
-                
-                // Buscar meses reabiertos en localStorage
-                if (key && key.startsWith('nomina_') && !key.includes('_archivo_') && !key.includes('nomina-reemplazos')) {
+                if (key.startsWith('nomina_') && !key.includes('_archivo_') && !key.includes('nomina-reemplazos')) {
                     const partes = key.split('_');
                     if (partes.length === 2 && partes[0] === 'nomina') {
                         const mesReabierto = partes[1];
                         if (mesReabierto !== mesActual && !mesesArchivados.has(mesReabierto)) {
-                            // Verificar si hay datos (no está vacío)
                             try {
-                                const datos = localStorage.getItem(lsKey(key));
+                                const datos = localStorage.getItem(keyCompleta);
                                 if (datos && datos !== '[]' && datos !== 'null') {
                                     mesesReabiertos.add(mesReabierto);
                                 }

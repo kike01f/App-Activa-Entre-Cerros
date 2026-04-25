@@ -20145,7 +20145,8 @@
             const nombreMes = obtenerNombreMes(mesActual);
             
             // Validar que solo se pueda cerrar el mes actual
-            if (window.mesEnConsulta && window.mesEnConsulta !== mesActual) {
+            const mesConsulta = normalizarMesAnio(window.mesEnConsulta) || window.mesEnConsulta;
+            if (mesConsulta && mesConsulta !== mesActual) {
                 mostrarAlerta('Solo se puede cerrar el mes actual. Por favor, vuelva al mes actual para cerrarlo.', 'Mes Incorrecto');
                 return;
             }
@@ -21311,32 +21312,13 @@
         .acciones-reporte .btn-imprimir {
             background: linear-gradient(135deg, #75bb21 0%, #5a9219 100%);
         }
-        .acciones-reporte .btn-guardar {
-            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-        }
     </style>
 </head>
 <body>
     <div class="acciones-reporte">
         <button class="btn-imprimir" onclick="window.print()">Guardar / Imprimir (PDF)</button>
-        <button class="btn-guardar" onclick="guardarReporteHTML()">Guardar HTML</button>
     </div>
     ${html}
-    <script>
-        function guardarReporteHTML() {
-            const contenido = '<!DOCTYPE html>\\n' + document.documentElement.outerHTML;
-            const blob = new Blob([contenido], { type: 'text/html;charset=utf-8' });
-            const url = URL.createObjectURL(blob);
-            const enlace = document.createElement('a');
-            const nombreBase = (document.title || 'Reporte').replace(/\\s+/g, '_');
-            enlace.href = url;
-            enlace.download = nombreBase + '.html';
-            document.body.appendChild(enlace);
-            enlace.click();
-            enlace.remove();
-            URL.revokeObjectURL(url);
-        }
-    <\/script>
 </body>
 </html>`;
             
@@ -21397,6 +21379,9 @@
                 } else {
                     // Mes archivado: intentar leer configuración archivada
                     configCaja = await obtenerDatosArchivados('caja-config', mesAnio);
+                    if ((!Array.isArray(configCaja) || configCaja.length === 0) && typeof obtenerDatosMesEspecifico === 'function') {
+                        configCaja = await obtenerDatosMesEspecifico('caja-config', mesAnio);
+                    }
                 }
                 if (Array.isArray(configCaja) && configCaja.length > 0 && configCaja[0].link) {
                     linkCarpetaComprobantes = configCaja[0].link;
@@ -21780,7 +21765,12 @@
                 }
             } else {
                 const arch = await obtenerDatosArchivados('mantenciones-config', mesAnio);
-                carpetaConfig = Array.isArray(arch) && arch.length > 0 ? arch[0] : null;
+                if (Array.isArray(arch) && arch.length > 0) {
+                    carpetaConfig = arch[0];
+                } else {
+                    const cfg = await obtenerDatosMesEspecifico('mantenciones-config', mesAnio);
+                    carpetaConfig = Array.isArray(cfg) && cfg.length > 0 ? cfg[0] : null;
+                }
             }
 
             html += `<div class="reporte-section" style="margin-top: 0.4rem;"><h2>CARPETA DE MANTENCIONES</h2>`;

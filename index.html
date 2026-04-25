@@ -20830,6 +20830,9 @@
                 size: A4;
                 margin: 0.7cm;
             }
+            .acciones-reporte {
+                display: none !important;
+            }
             body {
                 margin: 0;
                 padding: 0.25rem;
@@ -21287,10 +21290,53 @@
             word-break: break-all;
             font-size: 0.7rem;
         }
+        .acciones-reporte {
+            position: sticky;
+            top: 0.5rem;
+            z-index: 20;
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        .acciones-reporte button {
+            border: none;
+            border-radius: 8px;
+            padding: 0.55rem 0.9rem;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            color: #fff;
+        }
+        .acciones-reporte .btn-imprimir {
+            background: linear-gradient(135deg, #75bb21 0%, #5a9219 100%);
+        }
+        .acciones-reporte .btn-guardar {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        }
     </style>
 </head>
 <body>
+    <div class="acciones-reporte">
+        <button class="btn-imprimir" onclick="window.print()">Guardar / Imprimir (PDF)</button>
+        <button class="btn-guardar" onclick="guardarReporteHTML()">Guardar HTML</button>
+    </div>
     ${html}
+    <script>
+        function guardarReporteHTML() {
+            const contenido = '<!DOCTYPE html>\\n' + document.documentElement.outerHTML;
+            const blob = new Blob([contenido], { type: 'text/html;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const enlace = document.createElement('a');
+            const nombreBase = (document.title || 'Reporte').replace(/\\s+/g, '_');
+            enlace.href = url;
+            enlace.download = nombreBase + '.html';
+            document.body.appendChild(enlace);
+            enlace.click();
+            enlace.remove();
+            URL.revokeObjectURL(url);
+        }
+    <\/script>
 </body>
 </html>`;
             
@@ -21381,7 +21427,7 @@
                 <div class="reporte-section">
                     <h2>RESUMEN</h2>
                     <div style="background: #f8fafc; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem;">
-                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem;">
                             <div>
                                 <p style="margin: 0; color: var(--gray-600); font-size: 0.875rem;">Total de Movimientos</p>
                                 <p style="margin: 0.25rem 0 0 0; font-size: 1.25rem; font-weight: 600; color: var(--gray-900);">${caja.length}</p>
@@ -21389,10 +21435,6 @@
                             <div>
                                 <p style="margin: 0; color: var(--gray-600); font-size: 0.875rem;">Total Gastado</p>
                                 <p style="margin: 0.25rem 0 0 0; font-size: 1.25rem; font-weight: 600; color: rgba(117, 187, 33, 0.9);">${formatearMoneda(totalCaja)}</p>
-                            </div>
-                            <div>
-                                <p style="margin: 0; color: var(--gray-600); font-size: 0.875rem;">Promedio por Movimiento</p>
-                                <p style="margin: 0.25rem 0 0 0; font-size: 1.25rem; font-weight: 600; color: var(--gray-900);">${formatearMoneda(caja.length > 0 ? totalCaja / caja.length : 0)}</p>
                             </div>
                         </div>
                     </div>

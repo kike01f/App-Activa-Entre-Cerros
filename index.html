@@ -29733,6 +29733,7 @@
     'use strict';
 
     var LEGACY_STORAGE_KEY = typeof lsKey === 'function' ? lsKey('gestion_comunidad_tareas_v1') : 'ec_gestion_v1:gestion_comunidad_tareas_v1';
+    var SEEDED_MARKER_KEY = typeof lsKey === 'function' ? lsKey('gestion_tareas_seeded_v1') : 'ec_gestion_v1:gestion_tareas_seeded_v1';
 
     function getFsContext() {
         if (typeof global.getGestionFirestoreDb !== 'function') return null;
@@ -29772,6 +29773,20 @@
         } catch (e) {
             console.error('No se pudieron guardar las tareas (local)', e);
         }
+    }
+
+    function hasSeededBefore() {
+        try {
+            return localStorage.getItem(SEEDED_MARKER_KEY) === '1';
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function markSeeded() {
+        try {
+            localStorage.setItem(SEEDED_MARKER_KEY, '1');
+        } catch (e) {}
     }
 
     function persistTaskDoc(task) {
@@ -30012,8 +30027,13 @@
                 var L = loadTasksLegacy();
                 if (L && L.length) state.tasks = L;
                 else {
-                    state.tasks = seedSample();
-                    saveTasksLegacy();
+                    if (hasSeededBefore()) {
+                        state.tasks = [];
+                    } else {
+                        state.tasks = seedSample();
+                        saveTasksLegacy();
+                        markSeeded();
+                    }
                 }
                 resolve();
                 return;
@@ -30027,6 +30047,7 @@
                 });
                 if (arr.length) {
                     state.tasks = arr;
+                    markSeeded();
                     resolve();
                     return;
                 }
@@ -30034,6 +30055,7 @@
                 if (mig && mig.length) {
                     state.tasks = mig;
                     uploadBatchTasks(ctx, mig).then(function () {
+                        markSeeded();
                         try {
                             localStorage.removeItem(LEGACY_STORAGE_KEY);
                         } catch (e) {}
@@ -30043,20 +30065,57 @@
                     });
                     return;
                 }
+                if (hasSeededBefore()) {
+                    state.tasks = [];
+                    resolve();
+                    return;
+                }
                 state.tasks = seedSample();
                 uploadBatchTasks(ctx, state.tasks).then(function () {
+                    markSeeded();
                     resolve();
                 }).catch(function () {
                     saveTasksLegacy();
+                    markSeeded();
                     resolve();
                 });
             }).catch(function (err) {
                 console.error('Carga tareas Firestore:', err);
                 var L = loadTasksLegacy();
-                state.tasks = L && L.length ? L : seedSample();
-                if (!L || !L.length) saveTasksLegacy();
+                if (L && L.length) {
+                    state.tasks = L;
+                    markSeeded();
+                } else if (hasSeededBefore()) {
+                    state.tasks = [];
+                } else {
+                    state.tasks = seedSample();
+                    saveTasksLegacy();
+                    markSeeded();
+                }
                 resolve();
             });
+        });
+    }
+
+    var unsubscribeTasks = null;
+    function subscribeTasksRealtime() {
+        var ctx = getFsContext();
+        if (!ctx) return;
+        if (unsubscribeTasks) return;
+        unsubscribeTasks = ctx.itemsRef().onSnapshot(function (snap) {
+            var arr = [];
+            snap.forEach(function (d) {
+                var o = d.data() || {};
+                o.id = d.id;
+                arr.push(o);
+            });
+            state.tasks = arr;
+            markSeeded();
+            if (rootEl && rootEl.getAttribute('data-gt-inited') === '1') {
+                render();
+            }
+        }, function (err) {
+            console.error('Suscripción tiempo real tareas:', err);
         });
     }
 
@@ -30535,6 +30594,7 @@
         wireEvents();
         ensureTasks().then(function () {
             render();
+            subscribeTasksRealtime();
         });
     }
 
@@ -30543,6 +30603,7 @@
         else {
             ensureTasks().then(function () {
                 render();
+                subscribeTasksRealtime();
             });
         }
     }
